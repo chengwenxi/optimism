@@ -141,7 +141,7 @@ func (s *Source) L2BlockRefHead(ctx context.Context) (eth.L2BlockRef, error) {
 		// w%: wrap the error, we still need to detect if a canonical block is not found, a.k.a. end of chain.
 		return eth.L2BlockRef{}, fmt.Errorf("failed to determine block-hash of head, could not get header: %w", err)
 	}
-	return blockToBlockRef(block, s.genesis)
+	return BlockToBlockRef(block, s.genesis)
 }
 
 // L2BlockRefByNumber returns the canonical block and parent ids.
@@ -151,7 +151,7 @@ func (s *Source) L2BlockRefByNumber(ctx context.Context, l2Num *big.Int) (eth.L2
 		// w%: wrap the error, we still need to detect if a canonical block is not found, a.k.a. end of chain.
 		return eth.L2BlockRef{}, fmt.Errorf("failed to determine block-hash of height %v, could not get header: %w", l2Num, err)
 	}
-	return blockToBlockRef(block, s.genesis)
+	return BlockToBlockRef(block, s.genesis)
 }
 
 // L2BlockRefByHash returns the block & parent ids based on the supplied hash. The returned BlockRef may not be in the canonical chain
@@ -161,12 +161,12 @@ func (s *Source) L2BlockRefByHash(ctx context.Context, l2Hash common.Hash) (eth.
 		// w%: wrap the error, we still need to detect if a canonical block is not found, a.k.a. end of chain.
 		return eth.L2BlockRef{}, fmt.Errorf("failed to determine block-hash of height %v, could not get header: %w", l2Hash, err)
 	}
-	return blockToBlockRef(block, s.genesis)
+	return BlockToBlockRef(block, s.genesis)
 }
 
-// blockToBlockRef extracts the essential L2BlockRef information from a block,
+// BlockToBlockRef extracts the essential L2BlockRef information from a block,
 // falling back to genesis information if necessary.
-func blockToBlockRef(block *types.Block, genesis *rollup.Genesis) (eth.L2BlockRef, error) {
+func BlockToBlockRef(block *types.Block, genesis *rollup.Genesis) (eth.L2BlockRef, error) {
 	var l1Origin eth.BlockID
 	var sequenceNumber uint64
 	if block.NumberU64() == genesis.L2.Number {
@@ -227,7 +227,7 @@ func (s *ReadOnlySource) L2BlockRefByNumber(ctx context.Context, l2Num *big.Int)
 		// w%: wrap the error, we still need to detect if a canonical block is not found, a.k.a. end of chain.
 		return eth.L2BlockRef{}, fmt.Errorf("failed to determine block-hash of height %v, could not get header: %w", l2Num, err)
 	}
-	return blockToBlockRef(block, s.genesis)
+	return BlockToBlockRef(block, s.genesis)
 }
 
 // L2BlockRefByHash returns the block & parent ids based on the supplied hash. The returned BlockRef may not be in the canonical chain
@@ -237,7 +237,7 @@ func (s *ReadOnlySource) L2BlockRefByHash(ctx context.Context, l2Hash common.Has
 		// w%: wrap the error, we still need to detect if a canonical block is not found, a.k.a. end of chain.
 		return eth.L2BlockRef{}, fmt.Errorf("failed to determine block-hash of height %v, could not get header: %w", l2Hash, err)
 	}
-	return blockToBlockRef(block, s.genesis)
+	return BlockToBlockRef(block, s.genesis)
 }
 
 func (s *ReadOnlySource) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
