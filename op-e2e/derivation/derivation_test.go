@@ -6,6 +6,9 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"github.com/ethereum-optimism/optimism/op-node/l2"
+	"github.com/ethereum-optimism/optimism/op-node/testutils"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -108,6 +111,16 @@ type State struct {
 	l2Signer    types.Signer
 	l2Engine    *Engine
 
+	// L2 block building data
+	l2VMconf         vm.Config            // vm config used during ongoing building (includes trace options)
+	l2BuildingHeader *types.Header        // block header that we add txs to for block building
+	l2BuildingState  *state.StateDB       // state used for block building
+	l2GasPool        *core.GasPool        // track gas used of ongoing building
+	l2Transactions   []*types.Transaction // collects txs that were successfully included into current block build
+	l2Receipts       []*types.Receipt     // collect receipts of ongoing building
+	l2Building       bool
+	l2TxFailed       []*types.Transaction // log of failed transactions which could not be included
+
 	// Used to sync L1 from another node.
 	// The other node always has the canonical chain.
 	// May be nil if there is nothing to sync from
@@ -173,6 +186,10 @@ func (s *State) RunAction(action Action) error {
 }
 
 func (s *State) actL2PipelineStep() error {
+	if s.l2Building {
+		return InvalidActionErr
+	}
+
 	s.l2PipelineIdle = false
 	err := s.l2Pipeline.Step(context.Background())
 	if err == io.EOF {
@@ -472,17 +489,121 @@ func (s *State) actL1Sync() error {
 }
 
 func (s *State) actL2StartBlock() error {
+	if !s.l2PipelineIdle {
+		return InvalidActionErr
+	}
+
 	s.seqNextOrigin = false
+
+	parent := s.l2Chain.CurrentBlock()
+	parentHeader := parent.Header()
+	statedb, err := state.New(parent.Root(), state.NewDatabase(s.l2Database), nil)
+	if err != nil {
+		return fmt.Errorf("failed to init state db around block %s (state %s): %w", parent.Hash(), parent.Root(), err)
+	}
+	parentRef, err := l2.BlockToBlockRef(parent, &s.rollupCfg.Genesis)
+	if err != nil {
+		return fmt.Errorf("failed to get L2 block ref: %w", err)
+	}
+	currentOriginBlock := s.l1Chain.GetBlockByHash(parentRef.L1Origin.Hash)
+	if currentOriginBlock == nil {
+		return fmt.Errorf("origin block of L2 %s does not exist: %s", parentRef, parentRef.L1Origin)
+	}
+	l2Timestamp := parentHeader.Time + s.rollupCfg.BlockTime
+
+	// findL1Origin test equivalent
+	nextOriginBlock := s.l1Chain.GetBlockByNumber(currentOriginBlock.NumberU64() + 1)
+	originBlock := currentOriginBlock
+	if nextOriginBlock != nil && l2Timestamp >= nextOriginBlock.Time() {
+		originBlock = nextOriginBlock
+	}
+
+	// PreparePayloadAttributes test equivalent
+	var depositTxs []hexutil.Bytes
+	var seqNumber uint64
+	if parentRef.L1Origin.Number != originBlock.NumberU64() {
+		if parentRef.L1Origin.Hash != originBlock.ParentHash() {
+			return fmt.Errorf("cannot create new block with L1 origin %s (parent %s) on top of L1 origin %s",
+				originBlock.Hash(), originBlock.ParentHash(), parentRef.L1Origin)
+		}
+		receipts := s.l1Chain.GetReceiptsByHash(originBlock.Hash())
+		deposits, err := derive.DeriveDeposits(receipts, s.rollupCfg.DepositContractAddress)
+		if err != nil {
+			return fmt.Errorf("failed to derive some deposits: %w", err)
+		}
+		depositTxs = deposits
+		seqNumber = 0
+	} else {
+		if parentRef.L1Origin.Hash != originBlock.Hash() {
+			return fmt.Errorf("cannot create new block with L1 origin %s in conflict with L1 origin %s", originBlock.Hash(), parentRef.L1Origin)
+		}
+		depositTxs = nil
+		seqNumber = parentRef.SequenceNumber + 1
+	}
+
+	header := &types.Header{
+		ParentHash: parent.Hash(),
+		Coinbase:   s.rollupCfg.FeeRecipientAddress,
+		Difficulty: common.Big0,
+		Number:     new(big.Int).Add(parentHeader.Number, common.Big1),
+		GasLimit:   parentHeader.GasLimit,
+		Time:       l2Timestamp,
+		Extra:      nil,
+		MixDigest:  originBlock.MixDigest(),
+	}
+	header.BaseFee = misc.CalcBaseFee(s.l2Cfg.Config, parentHeader)
+
+	s.l2Building = true
+	s.l2BuildingHeader = header
+	s.l2BuildingState = statedb
+	s.l2Receipts = make([]*types.Receipt, 0)
+	s.l2Transactions = make([]*types.Transaction, 0)
+	s.l2VMconf = vm.Config{}
+	// TODO: maybe add tracer to vm config here
+
+	s.l2GasPool = new(core.GasPool).AddGas(header.GasLimit)
+
+	l1Info := &testutils.MockL1Info{
+		InfoHash:           originBlock.Hash(),
+		InfoParentHash:     originBlock.ParentHash(),
+		InfoRoot:           originBlock.Root(),
+		InfoNum:            originBlock.NumberU64(),
+		InfoTime:           originBlock.Time(),
+		InfoMixDigest:      originBlock.MixDigest(),
+		InfoBaseFee:        originBlock.BaseFee(),
+		InfoReceiptRoot:    originBlock.ReceiptHash(),
+		InfoSequenceNumber: seqNumber,
+	}
+	l1InfoTx, err := derive.L1InfoDepositBytes(seqNumber, l1Info)
+	if err != nil {
+		return fmt.Errorf("failed to create l1InfoTx: %w", err)
+	}
+
+	txs := make([]hexutil.Bytes, 0, 1+len(depositTxs))
+	txs = append(txs, l1InfoTx)
+	txs = append(txs, depositTxs...)
+
+	// pre-process the deposits
+
 	// if already started
 	return InvalidActionErr
 }
 
 func (s *State) actL2IncludeTx() error {
+	if !s.l2PipelineIdle {
+		return InvalidActionErr
+	}
+
 	// if insufficient gas, or forced to produce empty block due to sequencer drift
+
 	return InvalidActionErr
 }
 
 func (s *State) actL2EndBlock() error {
+	if !s.l2PipelineIdle {
+		return InvalidActionErr
+	}
+
 	// if not started
 	return InvalidActionErr
 }
