@@ -6,8 +6,10 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"github.com/ethereum-optimism/optimism/op-bindings/bindings"
 	"github.com/ethereum-optimism/optimism/op-node/l2"
 	"github.com/ethereum-optimism/optimism/op-node/testutils"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -31,20 +33,25 @@ import (
 
 var InvalidActionErr = errors.New("invalid action")
 
+const (
+	// never queue up more than 500 different transactions for L1 or L2, to prevent OOM during fuzzing etc.
+	maxTxQueueSize = 500
+)
+
 type Action uint8
 
 const (
-	actL2PipelineStep   = iota // run L2 derivation pipeline
-	actL2BatchBuffer           // add next L2 block to batch buffer
-	actL2BatchSubmit           // construct batch tx from L2 buffer content, submit to L1
-	actL1Deposit               // add rollup deposit to L1 tx queue
-	actL1AddTx                 // add regular tx to L1 tx queue
-	actL2AddTx                 // add regular tx to L2 tx queue
-	actL2MoveL1Origin          // move to next L1 origin
-	actL1RewindToParent        // rewind L1 chain to parent block of head
-	actL1StartBlock            // start new L1 block on top of head
-	actL1IncludeTx             // include next tx from L1 tx queue
-	actL1EndBlock              // finish new L1 block, apply to chain as unsafe block
+	actL2PipelineStep    = iota // run L2 derivation pipeline
+	actL2BatchBuffer            // add next L2 block to batch buffer
+	actL2BatchSubmit            // construct batch tx from L2 buffer content, submit to L1
+	actL1Deposit                // add rollup deposit to L1 tx queue
+	actL1AddTx                  // add regular tx to L1 tx queue
+	actL2AddTx                  // add regular tx to L2 tx queue
+	actL2TryKeepL1Origin        // attempt to keep current L1 origin, even if next origin is available
+	actL1RewindToParent         // rewind L1 chain to parent block of head
+	actL1StartBlock             // start new L1 block on top of head
+	actL1IncludeTx              // include next tx from L1 tx queue
+	actL1EndBlock               // finish new L1 block, apply to chain as unsafe block
 	actL1FinalizeNext
 	actL1SafeNext
 	actL1Sync                // process next canonical L1 block (may reorg)
@@ -75,7 +82,7 @@ type State struct {
 	l2Pipeline     *derive.DerivationPipeline
 	l2PipelineIdle bool
 
-	seqNextOrigin bool // move to next L1 origin when sequencing a block
+	seqOldOrigin bool // stay on current L1 origin when sequencing a block, unless forced to adopt the next origin
 
 	rollupCfg *rollup.Config
 
@@ -84,6 +91,28 @@ type State struct {
 	l2BufferedBlock  eth.BlockID
 	l2SubmittedBlock eth.BlockID
 	l2BatcherCfg     BatcherCfg
+
+	// test accounts
+	accounts     []*ecdsa.PrivateKey
+	accountAddrs []common.Address // matches accounts
+	// selectedAccount is the account used for signing: accounts[selectedAccount % len(accounts)]
+	selectedAccount uint64
+
+	// contract bindings
+	bindingPortal *bindings.OptimismPortal
+	// TODO add bindings/actions for interacting with the other contracts
+
+	// This should be seeded with:
+	//  - reserve 0 for selecting nil
+	//  - addresses of above accounts
+	//  - addresses of system contracts
+	//  - precompiles
+	//  - random addresses
+	//  - zero address
+	//  - masked L2 version of all the above
+	addresses []common.Address
+	// selectedToAddr is the address used as recipient in txs: addresses[selectedToAddr % uint64(len(s.addresses)]
+	selectedToAddr uint64
 
 	// L1 evm / chain
 	l1Chain     *core.BlockChain
@@ -118,6 +147,7 @@ type State struct {
 	l2GasPool        *core.GasPool        // track gas used of ongoing building
 	l2Transactions   []*types.Transaction // collects txs that were successfully included into current block build
 	l2Receipts       []*types.Receipt     // collect receipts of ongoing building
+	l2ForceEmpty     bool                 // when no additional txs may be processed (i.e. when sequencer drift runs out)
 	l2Building       bool
 	l2TxFailed       []*types.Transaction // log of failed transactions which could not be included
 
@@ -134,6 +164,8 @@ type State struct {
 
 func NewState(canonL1 func(num uint64) *types.Block) {
 	// todo types.LatestSignerForChainID(1234)
+	l2Cfg := &core.Genesis{}
+	l2Signer := types.LatestSignerForChainID(l2Cfg.Config.ChainID)
 }
 
 func (s *State) RunAction(action Action) error {
@@ -150,8 +182,8 @@ func (s *State) RunAction(action Action) error {
 		return s.actL1AddTx()
 	case actL2AddTx:
 		return s.actL2AddTx()
-	case actL2MoveL1Origin:
-		return s.actL2MoveL1Origin()
+	case actL2TryKeepL1Origin:
+		return s.actL2TryKeepL1Origin()
 	case actL1RewindToParent:
 		return s.actL1RewindToParent()
 	case actL1StartBlock:
@@ -276,6 +308,27 @@ func (s *State) l1NonceFor(addr common.Address) (uint64, error) {
 	return statedb.GetNonce(addr), nil
 }
 
+// Returns the current nonce for the given address, including in-flight txs.
+// Add +1 to get the nonce to use for the next tx.
+func (s *State) l2NonceFor(addr common.Address) (uint64, error) {
+	// iterate in reverse order to find any in-flight txs
+	for i := len(s.l2TxQueue) - 1; i >= 0; i-- {
+		tx := s.l2TxQueue[i]
+		sender, err := s.l2Signer.Sender(tx) // cached, doesn't hurt
+		if err != nil {
+			return 0, fmt.Errorf("failed to get tx sender: %w", err)
+		}
+		if sender == addr {
+			return tx.Nonce(), nil
+		}
+	}
+	statedb, err := s.l2Chain.State()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get state db: %v", err)
+	}
+	return statedb.GetNonce(addr), nil
+}
+
 func (s *State) actL2BatchSubmit() error {
 	// Don't run this action if there's no data to submit
 	if s.l2ChannelOut == nil || s.l2ChannelOut.ReadyBytes() == 0 {
@@ -326,25 +379,117 @@ func (s *State) actL2BatchSubmit() error {
 }
 
 func (s *State) actL1Deposit() error {
-	// TODO create a deposit tx on L1 to L2, append to L1 tx queue
-	return InvalidActionErr
+	// create a deposit tx on L1 to L2, append to L1 tx queue
+	if len(s.l1TxQueue) >= maxTxQueueSize {
+		return InvalidActionErr
+	}
+
+	// create a regular random tx on L1, append to L1 tx queue
+	fromIndex := s.selectedAccount % uint64(len(s.accounts))
+	fromPriv := s.accounts[fromIndex]
+	fromAddr := s.accountAddrs[fromIndex]
+	nonce, err := s.l1NonceFor(fromAddr)
+	if err != nil {
+		return fmt.Errorf("failed to get L1 nonce for account %s: %w", fromAddr, err)
+	}
+
+	// L2 recipient address
+	toIndex := s.selectedToAddr % uint64(len(s.addresses))
+	toAddr := s.addresses[toIndex]
+	isCreation := toIndex == 0
+
+	// TODO randomize deposit contents
+	value := big.NewInt(1_000_000_000)
+	gasLimit := uint64(50_000)
+	data := []byte{0x42}
+
+	txOpts, err := bind.NewKeyedTransactorWithChainID(fromPriv, s.l1Cfg.Config.ChainID)
+	if err != nil {
+		return fmt.Errorf("failed to create NewKeyedTransactorWithChainID for L1 deposit: %w", err)
+	}
+	txOpts.Nonce = new(big.Int).SetUint64(nonce)
+	txOpts.NoSend = true
+	// TODO: maybe change the txOpts L1 fee parameters
+
+	tx, err := s.bindingPortal.DepositTransaction(txOpts, toAddr, value, gasLimit, isCreation, data)
+	if err != nil {
+		return fmt.Errorf("failed to create deposit tx: %w", err)
+	}
+
+	s.l1TxQueue = append(s.l1TxQueue, tx)
+
+	return nil
 }
 
 func (s *State) actL1AddTx() error {
-	// TODO create a regular random tx on L1, append to L1 tx queue
+	if len(s.l1TxQueue) >= maxTxQueueSize {
+		return InvalidActionErr
+	}
+	// create a regular random tx on L1, append to L1 tx queue
+	fromIndex := s.selectedAccount % uint64(len(s.accounts))
+	fromPriv := s.accounts[fromIndex]
+	fromAddr := s.accountAddrs[fromIndex]
+	nonce, err := s.l1NonceFor(fromAddr)
+	if err != nil {
+		return fmt.Errorf("failed to get L1 nonce for account %s: %w", fromAddr, err)
+	}
+	toIndex := s.selectedToAddr % uint64(len(s.addresses))
+	var to *common.Address
+	if toIndex > 0 {
+		to = &s.addresses[toIndex]
+	}
+	// TODO: randomize tx contents
+	tx := types.MustSignNewTx(fromPriv, s.l2Signer, &types.DynamicFeeTx{
+		ChainID:   s.l2Cfg.Config.ChainID,
+		Nonce:     nonce,
+		To:        to,
+		Value:     big.NewInt(1_000_000_000),
+		GasTipCap: big.NewInt(10),
+		GasFeeCap: big.NewInt(200),
+		Gas:       21000,
+	})
+	s.l1TxQueue = append(s.l1TxQueue, tx)
+
 	return InvalidActionErr
 }
 
 func (s *State) actL2AddTx() error {
-	// TODO create a regular random tx on L2, append to L2 tx queue
+	if len(s.l2TxQueue) >= maxTxQueueSize {
+		return InvalidActionErr
+	}
+	// create a regular random tx on L1, append to L1 tx queue
+	fromIndex := s.selectedAccount % uint64(len(s.accounts))
+	fromPriv := s.accounts[fromIndex]
+	fromAddr := s.accountAddrs[fromIndex]
+	nonce, err := s.l2NonceFor(fromAddr)
+	if err != nil {
+		return fmt.Errorf("failed to get L1 nonce for account %s: %w", fromAddr, err)
+	}
+	toIndex := s.selectedToAddr % uint64(len(s.addresses))
+	var to *common.Address
+	if toIndex > 0 {
+		to = &s.addresses[toIndex]
+	}
+	// TODO: randomize tx contents
+	tx := types.MustSignNewTx(fromPriv, s.l2Signer, &types.DynamicFeeTx{
+		ChainID:   s.l2Cfg.Config.ChainID,
+		Nonce:     nonce,
+		To:        to,
+		Value:     big.NewInt(1_000_000_000),
+		GasTipCap: big.NewInt(10),
+		GasFeeCap: big.NewInt(200),
+		Gas:       21000,
+	})
+	s.l2TxQueue = append(s.l2TxQueue, tx)
+
 	return InvalidActionErr
 }
 
-func (s *State) actL2MoveL1Origin() error {
-	if s.seqNextOrigin { // don't do this twice
+func (s *State) actL2TryKeepL1Origin() error {
+	if s.seqOldOrigin { // don't do this twice
 		return InvalidActionErr
 	}
-	s.seqNextOrigin = true
+	s.seqOldOrigin = true
 	return nil
 }
 
@@ -492,8 +637,10 @@ func (s *State) actL2StartBlock() error {
 	if !s.l2PipelineIdle {
 		return InvalidActionErr
 	}
-
-	s.seqNextOrigin = false
+	if s.l2Building {
+		// if already started
+		return InvalidActionErr
+	}
 
 	parent := s.l2Chain.CurrentBlock()
 	parentHeader := parent.Header()
@@ -514,9 +661,11 @@ func (s *State) actL2StartBlock() error {
 	// findL1Origin test equivalent
 	nextOriginBlock := s.l1Chain.GetBlockByNumber(currentOriginBlock.NumberU64() + 1)
 	originBlock := currentOriginBlock
-	if nextOriginBlock != nil && l2Timestamp >= nextOriginBlock.Time() {
+	// if we have a next block, and are either forced to adopt it, or just don't want to stay on the old origin, then adopt it.
+	if nextOriginBlock != nil && (l2Timestamp >= nextOriginBlock.Time() || !s.seqOldOrigin) {
 		originBlock = nextOriginBlock
 	}
+	s.seqOldOrigin = false
 
 	// PreparePayloadAttributes test equivalent
 	var depositTxs []hexutil.Bytes
@@ -553,6 +702,9 @@ func (s *State) actL2StartBlock() error {
 	}
 	header.BaseFee = misc.CalcBaseFee(s.l2Cfg.Config, parentHeader)
 
+	// sequencer may not include anything extra if we run out of drift
+	s.l2ForceEmpty = l2Timestamp >= originBlock.Time()+s.rollupCfg.MaxSequencerDrift
+
 	s.l2Building = true
 	s.l2BuildingHeader = header
 	s.l2BuildingState = statedb
@@ -584,28 +736,78 @@ func (s *State) actL2StartBlock() error {
 	txs = append(txs, depositTxs...)
 
 	// pre-process the deposits
+	for i, otx := range txs {
+		var tx types.Transaction
+		if err := tx.UnmarshalBinary(otx); err != nil {
+			return fmt.Errorf("failed to process deposit %d: %w", i, err)
+		}
+		receipt, err := core.ApplyTransaction(s.l2Cfg.Config, s.l2Chain, &s.l2BuildingHeader.Coinbase,
+			s.l2GasPool, s.l2BuildingState, s.l2BuildingHeader, &tx, &s.l2BuildingHeader.GasUsed, s.l2VMconf)
+		if err != nil {
+			s.l2TxFailed = append(s.l2TxFailed, &tx)
+			return fmt.Errorf("failed to apply deposit transaction to L2 block (tx %d): %w", i, err)
+		}
+		s.l2Receipts = append(s.l2Receipts, receipt)
+		s.l2Transactions = append(s.l2Transactions, &tx)
+	}
 
-	// if already started
-	return InvalidActionErr
+	return nil
 }
 
 func (s *State) actL2IncludeTx() error {
-	if !s.l2PipelineIdle {
+	if !s.l2Building {
+		return InvalidActionErr
+	}
+	if len(s.l2TxQueue) == 0 {
+		return InvalidActionErr
+	}
+	if s.l2ForceEmpty {
 		return InvalidActionErr
 	}
 
-	// if insufficient gas, or forced to produce empty block due to sequencer drift
-
-	return InvalidActionErr
+	tx := s.l2TxQueue[0]
+	if tx.Gas() > s.l2BuildingHeader.GasLimit {
+		return fmt.Errorf("tx consumes %d gas, more than available in L2 block %d", tx.Gas(), s.l2BuildingHeader.GasLimit)
+	}
+	if uint64(*s.l2GasPool) < tx.Gas() {
+		return InvalidActionErr // insufficient gas to include the tx
+	}
+	s.l2TxQueue = s.l2TxQueue[1:] // won't retry the tx
+	receipt, err := core.ApplyTransaction(s.l2Cfg.Config, s.l2Chain, &s.l2BuildingHeader.Coinbase,
+		s.l2GasPool, s.l2BuildingState, s.l2BuildingHeader, tx, &s.l2BuildingHeader.GasUsed, s.l2VMconf)
+	if err != nil {
+		s.l2TxFailed = append(s.l2TxFailed, tx)
+		return fmt.Errorf("failed to apply transaction to L1 block (tx %d): %w", len(s.l2Transactions), err)
+	}
+	s.l2Receipts = append(s.l2Receipts, receipt)
+	s.l2Transactions = append(s.l2Transactions, tx)
+	return nil
 }
 
 func (s *State) actL2EndBlock() error {
-	if !s.l2PipelineIdle {
+	if !s.l2Building {
 		return InvalidActionErr
 	}
 
-	// if not started
-	return InvalidActionErr
+	s.l2Building = false
+	s.l2BuildingHeader.GasUsed = s.l2BuildingHeader.GasLimit - uint64(*s.l2GasPool)
+	s.l2BuildingHeader.Root = s.l2BuildingState.IntermediateRoot(s.l2Cfg.Config.IsEIP158(s.l2BuildingHeader.Number))
+	block := types.NewBlock(s.l2BuildingHeader, s.l2Transactions, nil, s.l2Receipts, trie.NewStackTrie(nil))
+
+	// Write state changes to db
+	root, err := s.l2BuildingState.Commit(s.l2Cfg.Config.IsEIP158(s.l2BuildingHeader.Number))
+	if err != nil {
+		return fmt.Errorf("l2 state write error: %v", err)
+	}
+	if err := s.l2BuildingState.Database().TrieDB().Commit(root, false, nil); err != nil {
+		return fmt.Errorf("l2 trie write error: %v", err)
+	}
+
+	_, err = s.l2Chain.InsertChain(types.Blocks{block})
+	if err != nil {
+		return fmt.Errorf("failed to insert block into l2 chain")
+	}
+	return nil
 }
 
 func (s *State) actL1RPCFail() error {
