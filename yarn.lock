@@ -652,6 +652,15 @@
     minimatch "^3.1.2"
     strip-json-comments "^3.1.1"
 
+"@eth-optimism/contracts@0.5.33":
+  version "0.5.33"
+  resolved "https://registry.yarnpkg.com/@eth-optimism/contracts/-/contracts-0.5.33.tgz#1adeb902ff849152ecdb8639af5ba76dfc27c213"
+  integrity sha512-lOj0psjl/7oydUXuSXhZ3P55zAXBNSgK6OzZeCW6JQ+drN+1OEdyp/MYKrSh8Cw8fW2k9MMdWbOuTa7/Blb0hA==
+  dependencies:
+    "@eth-optimism/core-utils" "0.9.3"
+    "@ethersproject/abstract-provider" "^5.6.1"
+    "@ethersproject/abstract-signer" "^5.6.2"
+
 "@ethereum-waffle/chai@^3.4.0":
   version "3.4.0"
   resolved "https://registry.yarnpkg.com/@ethereum-waffle/chai/-/chai-3.4.0.tgz#2477877410a96bf370edd64df905b04fb9aba9d5"
