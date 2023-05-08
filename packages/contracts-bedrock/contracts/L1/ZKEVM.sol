@@ -9,7 +9,7 @@ contract ZKEVM is CircuitConfig {
         bytes blockWitness;
         bytes stateRoot;
         uint256 timestamp;
-        bytes transactions; //RLP encode
+        bytes transactions; // RLP encode
         bytes32 globalExitRoot; // withdraw merkle tree
     }
 
