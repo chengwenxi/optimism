@@ -81,10 +81,15 @@ var (
 			return &out
 		}(),
 	}
-	Detached = cli.BoolFlag{
-		Name:   "detached",
-		Usage:  "Run the program as a separate process detached from the host",
-		EnvVar: service.PrefixEnvVar(envVarPrefix, "DETACHED"),
+	Exec = cli.StringFlag{
+		Name:   "exec",
+		Usage:  "Run the specified client program as a separate process detached from the host. Default is to run the client program in the host process.",
+		EnvVar: service.PrefixEnvVar(envVarPrefix, "EXEC"),
+	}
+	Server = cli.BoolFlag{
+		Name:   "server",
+		Usage:  "Run in pre-image server mode without executing any client program.",
+		EnvVar: service.PrefixEnvVar(envVarPrefix, "SERVER"),
 	}
 )
 
@@ -106,7 +111,8 @@ var programFlags = []cli.Flag{
 	L1NodeAddr,
 	L1TrustRPC,
 	L1RPCProviderKind,
-	Detached,
+	Exec,
+	Server,
 }
 
 func init() {

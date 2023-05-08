@@ -25,6 +25,7 @@ var (
 	ErrInvalidL2Claim      = errors.New("invalid l2 claim")
 	ErrInvalidL2ClaimBlock = errors.New("invalid l2 claim block number")
 	ErrDataDirRequired     = errors.New("datadir must be specified when in non-fetching mode")
+	ErrNoExecInServerMode  = errors.New("exec command must not be set when in server mode")
 )
 
 type Config struct {
@@ -49,8 +50,13 @@ type Config struct {
 	L2ClaimBlockNumber uint64
 	// L2ChainConfig is the op-geth chain config for the L2 execution engine
 	L2ChainConfig *params.ChainConfig
-	// Detached indicates that the program runs as a separate process
-	Detached bool
+	// ExecCmd specifies the client program to execute in a separate process.
+	// If unset, the fault proof client is run in the same process.
+	ExecCmd string
+
+	// ServerMode indicates that the program should run in pre-image server mode and wait for requests.
+	// No client program is run.
+	ServerMode bool
 }
 
 func (c *Config) Check() error {
@@ -80,6 +86,9 @@ func (c *Config) Check() error {
 	}
 	if !c.FetchingEnabled() && c.DataDir == "" {
 		return ErrDataDirRequired
+	}
+	if c.ServerMode && c.ExecCmd != "" {
+		return ErrNoExecInServerMode
 	}
 	return nil
 }
@@ -148,7 +157,8 @@ func NewConfigFromCLI(ctx *cli.Context) (*Config, error) {
 		L1URL:              ctx.GlobalString(flags.L1NodeAddr.Name),
 		L1TrustRPC:         ctx.GlobalBool(flags.L1TrustRPC.Name),
 		L1RPCKind:          sources.RPCProviderKind(ctx.GlobalString(flags.L1RPCProviderKind.Name)),
-		Detached:           ctx.GlobalBool(flags.Detached.Name),
+		ExecCmd:            ctx.GlobalString(flags.Exec.Name),
+		ServerMode:         ctx.GlobalBool(flags.Server.Name),
 	}, nil
 }
 

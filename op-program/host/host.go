@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/client"
 	"github.com/ethereum-optimism/optimism/op-node/sources"
 	cl "github.com/ethereum-optimism/optimism/op-program/client"
+	"github.com/ethereum-optimism/optimism/op-program/client/driver"
 	"github.com/ethereum-optimism/optimism/op-program/host/config"
 	"github.com/ethereum-optimism/optimism/op-program/host/kvstore"
 	"github.com/ethereum-optimism/optimism/op-program/host/prefetcher"
@@ -27,21 +28,115 @@ type L2Source struct {
 	*sources.DebugClient
 }
 
-const opProgramChildEnvName = "OP_PROGRAM_CHILD"
-
-func RunningProgramInClient() bool {
-	value, _ := os.LookupEnv(opProgramChildEnvName)
-	return value == "true"
-}
-
-// FaultProofProgram is the programmatic entry-point for the fault proof program
-func FaultProofProgram(logger log.Logger, cfg *config.Config) error {
+func Main(logger log.Logger, cfg *config.Config) error {
 	if err := cfg.Check(); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
 	cfg.Rollup.LogDescription(logger, chaincfg.L2ChainIDToNetworkName)
 
 	ctx := context.Background()
+	if cfg.ServerMode {
+		preimageChan := cl.CreatePreimageChannel()
+		hinterChan := cl.CreateHinterChannel()
+		return PreimageServer(ctx, logger, cfg, preimageChan, hinterChan)
+	}
+
+	if err := FaultProofProgram(ctx, logger, cfg); errors.Is(err, driver.ErrClaimNotValid) {
+		log.Crit("Claim is invalid", "err", err)
+	} else if err != nil {
+		return err
+	} else {
+		log.Info("Claim successfully verified")
+	}
+	return nil
+}
+
+// FaultProofProgram is the programmatic entry-point for the fault proof program
+func FaultProofProgram(ctx context.Context, logger log.Logger, cfg *config.Config) error {
+	var (
+		serverErr chan error
+		pClientRW oppio.FileChannel
+		hClientRW oppio.FileChannel
+	)
+	defer func() {
+		if pClientRW != nil {
+			_ = pClientRW.Close()
+		}
+		if hClientRW != nil {
+			_ = hClientRW.Close()
+		}
+		if serverErr != nil {
+			err := <-serverErr
+			if err != nil {
+				logger.Error("preimage server failed", "err", err)
+			}
+			logger.Debug("Preimage server stopped")
+		}
+	}()
+	// Setup client I/O for preimage oracle interaction
+	pClientRW, pHostRW, err := oppio.CreateBidirectionalChannel()
+	if err != nil {
+		return fmt.Errorf("failed to create preimage pipe: %w", err)
+	}
+
+	// Setup client I/O for hint comms
+	hClientRW, hHostRW, err := oppio.CreateBidirectionalChannel()
+	if err != nil {
+		return fmt.Errorf("failed to create hints pipe: %w", err)
+	}
+
+	// Use a channel to receive the server result so we can wait for it to complete before returning
+	serverErr = make(chan error)
+	go func() {
+		defer close(serverErr)
+		serverErr <- PreimageServer(ctx, logger, cfg, pHostRW, hHostRW)
+	}()
+
+	var cmd *exec.Cmd
+	if cfg.ExecCmd != "" {
+		cmd = exec.CommandContext(ctx, cfg.ExecCmd)
+		cmd.ExtraFiles = make([]*os.File, cl.MaxFd-3) // not including stdin, stdout and stderr
+		cmd.ExtraFiles[cl.HClientRFd-3] = hClientRW.Reader()
+		cmd.ExtraFiles[cl.HClientWFd-3] = hClientRW.Writer()
+		cmd.ExtraFiles[cl.PClientRFd-3] = pClientRW.Reader()
+		cmd.ExtraFiles[cl.PClientWFd-3] = pClientRW.Writer()
+		cmd.Stdout = os.Stdout // for debugging
+		cmd.Stderr = os.Stderr // for debugging
+
+		err := cmd.Start()
+		if err != nil {
+			return fmt.Errorf("program cmd failed to start: %w", err)
+		}
+		if err := cmd.Wait(); err != nil {
+			return fmt.Errorf("failed to wait for child program: %w", err)
+		}
+		logger.Debug("Client program completed successfully")
+		return nil
+	} else {
+		return cl.RunProgram(logger, pClientRW, hClientRW)
+	}
+}
+
+// PreimageServer reads hints and preimage requests from the provided channels and processes those requests.
+// This method will block until both the hinter and preimage handlers complete.
+// If either returns an error both handlers are stopped.
+// The supplied preimageChannel and hintChannel will be closed before this function returns.
+func PreimageServer(ctx context.Context, logger log.Logger, cfg *config.Config, preimageChannel oppio.FileChannel, hintChannel oppio.FileChannel) error {
+	var serverDone chan error
+	var hinterDone chan error
+	defer func() {
+		preimageChannel.Close()
+		hintChannel.Close()
+		if serverDone != nil {
+			// Wait for pre-image server to complete
+			<-serverDone
+		}
+		if hinterDone != nil {
+			// Wait for hinter to complete
+			<-hinterDone
+		}
+	}()
+	logger.Info("Starting preimage server")
 	var kv kvstore.KV
 	if cfg.DataDir == "" {
 		logger.Info("Using in-memory storage")
@@ -55,8 +150,8 @@ func FaultProofProgram(logger log.Logger, cfg *config.Config) error {
 	}
 
 	var (
-		getPreimage func(key common.Hash) ([]byte, error)
-		hinter      func(hint string) error
+		getPreimage kvstore.PreimageSource
+		hinter      preimage.HintHandler
 	)
 	if cfg.FetchingEnabled() {
 		prefetch, err := makePrefetcher(ctx, logger, kv, cfg)
@@ -76,47 +171,15 @@ func FaultProofProgram(logger log.Logger, cfg *config.Config) error {
 
 	localPreimageSource := kvstore.NewLocalPreimageSource(cfg)
 	splitter := kvstore.NewPreimageSourceSplitter(localPreimageSource.Get, getPreimage)
+	preimageGetter := splitter.Get
 
-	// Setup client I/O for preimage oracle interaction
-	pClientRW, pHostRW, err := oppio.CreateBidirectionalChannel()
-	if err != nil {
-		return fmt.Errorf("failed to create preimage pipe: %w", err)
-	}
-	oracleServer := preimage.NewOracleServer(pHostRW)
-	launchOracleServer(logger, oracleServer, splitter.Get)
-	defer pHostRW.Close()
-
-	// Setup client I/O for hint comms
-	hClientRW, hHostRW, err := oppio.CreateBidirectionalChannel()
-	if err != nil {
-		return fmt.Errorf("failed to create hints pipe: %w", err)
-	}
-	defer hHostRW.Close()
-	hHost := preimage.NewHintReader(hHostRW)
-	routeHints(logger, hHost, hinter)
-
-	var cmd *exec.Cmd
-	if cfg.Detached {
-		cmd = exec.CommandContext(ctx, os.Args[0])
-		cmd.ExtraFiles = make([]*os.File, cl.MaxFd-3) // not including stdin, stdout and stderr
-		cmd.ExtraFiles[cl.HClientRFd-3] = hClientRW.Reader()
-		cmd.ExtraFiles[cl.HClientWFd-3] = hClientRW.Writer()
-		cmd.ExtraFiles[cl.PClientRFd-3] = pClientRW.Reader()
-		cmd.ExtraFiles[cl.PClientWFd-3] = pClientRW.Writer()
-		cmd.Stdout = os.Stdout // for debugging
-		cmd.Stderr = os.Stderr // for debugging
-		cmd.Env = append(os.Environ(), fmt.Sprintf("%s=true", opProgramChildEnvName))
-
-		err := cmd.Start()
-		if err != nil {
-			return fmt.Errorf("program cmd failed to start: %w", err)
-		}
-		if err := cmd.Wait(); err != nil {
-			return fmt.Errorf("failed to wait for child program: %w", err)
-		}
-		return nil
-	} else {
-		return cl.RunProgram(logger, pClientRW, hClientRW)
+	serverDone = launchOracleServer(logger, preimageChannel, preimageGetter)
+	hinterDone = routeHints(logger, hintChannel, hinter)
+	select {
+	case err := <-serverDone:
+		return err
+	case err := <-hinterDone:
+		return err
 	}
 }
 
@@ -147,8 +210,11 @@ func makePrefetcher(ctx context.Context, logger log.Logger, kv kvstore.KV, cfg *
 	return prefetcher.NewPrefetcher(logger, l1Cl, l2DebugCl, kv), nil
 }
 
-func routeHints(logger log.Logger, hintReader *preimage.HintReader, hinter func(hint string) error) {
+func routeHints(logger log.Logger, hHostRW io.ReadWriter, hinter preimage.HintHandler) chan error {
+	chErr := make(chan error)
+	hintReader := preimage.NewHintReader(hHostRW)
 	go func() {
+		defer close(chErr)
 		for {
 			if err := hintReader.NextHint(hinter); err != nil {
 				if err == io.EOF || errors.Is(err, fs.ErrClosed) {
@@ -156,14 +222,19 @@ func routeHints(logger log.Logger, hintReader *preimage.HintReader, hinter func(
 					return
 				}
 				logger.Error("pre-image hint router error", "err", err)
+				chErr <- err
 				return
 			}
 		}
 	}()
+	return chErr
 }
 
-func launchOracleServer(logger log.Logger, server *preimage.OracleServer, getter func(key common.Hash) ([]byte, error)) {
+func launchOracleServer(logger log.Logger, pHostRW io.ReadWriteCloser, getter preimage.PreimageGetter) chan error {
+	chErr := make(chan error)
+	server := preimage.NewOracleServer(pHostRW)
 	go func() {
+		defer close(chErr)
 		for {
 			if err := server.NextPreimageRequest(getter); err != nil {
 				if err == io.EOF || errors.Is(err, fs.ErrClosed) {
@@ -171,8 +242,10 @@ func launchOracleServer(logger log.Logger, server *preimage.OracleServer, getter
 					return
 				}
 				logger.Error("pre-image server error", "error", err)
+				chErr <- err
 				return
 			}
 		}
 	}()
+	return chErr
 }

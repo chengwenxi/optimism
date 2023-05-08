@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/eth"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	opclient "github.com/ethereum-optimism/optimism/op-service/client"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -49,17 +50,17 @@ func NewBatchSubmitterFromCLIConfig(cfg CLIConfig, l log.Logger, m metrics.Metri
 
 	// Connect to L1 and L2 providers. Perform these last since they are the
 	// most expensive.
-	l1Client, err := dialEthClientWithTimeout(ctx, cfg.L1EthRpc)
+	l1Client, err := opclient.DialEthClientWithTimeout(ctx, cfg.L1EthRpc, opclient.DefaultDialTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	l2Client, err := dialEthClientWithTimeout(ctx, cfg.L2EthRpc)
+	l2Client, err := opclient.DialEthClientWithTimeout(ctx, cfg.L2EthRpc, opclient.DefaultDialTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	rollupClient, err := dialRollupClientWithTimeout(ctx, cfg.RollupRpc)
+	rollupClient, err := opclient.DialRollupClientWithTimeout(ctx, cfg.RollupRpc, opclient.DefaultDialTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -187,13 +188,15 @@ func (l *BatchSubmitter) Stop(ctx context.Context) error {
 // 2. Check if the sync status is valid or if we are all the way up to date
 // 3. Check if it needs to initialize state OR it is lagging (todo: lagging just means race condition?)
 // 4. Load all new blocks into the local state.
-func (l *BatchSubmitter) loadBlocksIntoState(ctx context.Context) {
+// If there is a reorg, it will reset the last stored block but not clear the internal state so
+// the state can be flushed to L1.
+func (l *BatchSubmitter) loadBlocksIntoState(ctx context.Context) error {
 	start, end, err := l.calculateL2BlockRangeToStore(ctx)
 	if err != nil {
 		l.log.Warn("Error calculating L2 block range", "err", err)
-		return
+		return err
 	} else if start.Number >= end.Number {
-		return
+		return errors.New("start number is >= end number")
 	}
 
 	var latestBlock *types.Block
@@ -202,12 +205,11 @@ func (l *BatchSubmitter) loadBlocksIntoState(ctx context.Context) {
 		block, err := l.loadBlockIntoState(ctx, i)
 		if errors.Is(err, ErrReorg) {
 			l.log.Warn("Found L2 reorg", "block_number", i)
-			l.state.Clear()
 			l.lastStoredBlock = eth.BlockID{}
-			return
+			return err
 		} else if err != nil {
 			l.log.Warn("failed to load block into state", "err", err)
-			return
+			return err
 		}
 		l.lastStoredBlock = eth.ToBlockID(block)
 		latestBlock = block
@@ -216,10 +218,11 @@ func (l *BatchSubmitter) loadBlocksIntoState(ctx context.Context) {
 	l2ref, err := derive.L2BlockToBlockRef(latestBlock, &l.Rollup.Genesis)
 	if err != nil {
 		l.log.Warn("Invalid L2 block loaded into state", "err", err)
-		return
+		return err
 	}
 
 	l.metr.RecordL2BlocksLoaded(l2ref)
+	return nil
 }
 
 // loadBlockIntoState fetches & stores a single block into `state`. It returns the block it loaded.
@@ -294,7 +297,15 @@ func (l *BatchSubmitter) loop() {
 	for {
 		select {
 		case <-ticker.C:
-			l.loadBlocksIntoState(l.shutdownCtx)
+			if err := l.loadBlocksIntoState(l.shutdownCtx); errors.Is(err, ErrReorg) {
+				err := l.state.Close()
+				if err != nil {
+					l.log.Error("error closing the channel manager to handle a L2 reorg", "err", err)
+				}
+				l.publishStateToL1(queue, receiptsCh, true)
+				l.state.Clear()
+				continue
+			}
 			l.publishStateToL1(queue, receiptsCh, false)
 		case r := <-receiptsCh:
 			l.handleReceipt(r)
