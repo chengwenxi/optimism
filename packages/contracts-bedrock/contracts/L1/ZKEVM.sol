@@ -27,6 +27,8 @@ contract ZKEVM is CircuitConfig {
     mapping(uint64 => uint256) public originTimestamps;
     mapping(uint64 => uint256) public challenges; // batch => amount
 
+    event SubmitBatches(uint64 indexed numBatch);
+
     constructor(OptimismPortal _portal) {
         lastBatchSequenced = 0;
         PORTAL = _portal;
@@ -58,6 +60,8 @@ contract ZKEVM is CircuitConfig {
             originTimestamps[currentBatchSequenced] = batches[i].timestamp;
         }
         lastBatchSequenced = currentBatchSequenced;
+
+        emit SubmitBatches(lastBatchSequenced);
     }
 
     // challengeState challenges a batch by submitting a deposit.
