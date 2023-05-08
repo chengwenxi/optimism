@@ -4,11 +4,11 @@ pragma solidity ^0.8.9;
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
- * @title L1GasPriceOracle contract
+ * @title GasPriceOracle contract
  * @custom:predeploy 0x5300000000000000000000000000000000000002
  * @dev Entrance to the update method for L1 gas prices
  **/
-contract L1GasPriceOracle is Ownable {
+contract GasPriceOracle is Ownable {
     /*//////////////////////////////////////////////////////////////
                                STORAGE
     //////////////////////////////////////////////////////////////*/

@@ -46,6 +46,8 @@ contract L2ToL1MessagePasser is Semver {
     /// @notice The list of zero hash in each height.
     bytes32[MAX_TREE_HEIGHT] private zeroHashes;
 
+    bytes32[MAX_TREE_HEIGHT] public branches;
+
     /**
      * @notice Emitted any time a withdrawal is initiated.
      *
@@ -156,7 +158,7 @@ contract L2ToL1MessagePasser is Semver {
     }
 
     function _appendMessageHash(bytes32 _messageHash) internal returns (bytes32) {
-        uint256 _currentMessageIndex = msgNonce;
+        uint240 _currentMessageIndex = msgNonce;
         bytes32 _hash = _messageHash;
         uint256 _height = 0;
         // @todo it can be optimized, since we only need the newly added branch.

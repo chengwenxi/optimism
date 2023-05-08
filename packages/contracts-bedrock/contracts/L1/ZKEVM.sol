@@ -7,7 +7,7 @@ import { OptimismPortal } from "./OptimismPortal.sol";
 contract ZKEVM is CircuitConfig {
     struct BatchData {
         bytes blockWitness;
-        bytes stateRoot;
+        bytes32 stateRoot;
         uint256 timestamp;
         bytes transactions; // RLP encode
         bytes32 globalExitRoot; // withdraw merkle tree
@@ -34,12 +34,13 @@ contract ZKEVM is CircuitConfig {
         PORTAL = _portal;
     }
 
-    function submitBatches(BatchData[] calldata batches) external {
+    function submitBatches(BatchData[] calldata batches) external payable{
         uint256 batchesNum = batches.length;
         uint64 currentBatchSequenced = lastBatchSequenced;
 
         for (uint256 i = 0; i < batchesNum; i++) {
             uint256 chainId = 99;
+            uint256 blockGas = 63000;
             (uint256 MAX_TXS, uint256 MAX_CALLDATA) = _getCircuitConfig(blockGas);
             uint256[] memory publicInput = _buildCommitment(
                 MAX_TXS,
@@ -75,7 +76,7 @@ contract ZKEVM is CircuitConfig {
         // check challenge amount
         require(deposit >= MIN_DEPOSIT);
 
-        challenges[batch] = amount;
+        challenges[batch] = deposit;
     }
 
     // proveState proves a batch by submitting a proof.
@@ -91,12 +92,12 @@ contract ZKEVM is CircuitConfig {
             // PORTAL.pause();
         } else {
             // check proof
-            require(proof != 0x0);
-            require(_verifyProof(proof, commitments[blockHash]));
+            require(proof.length > 0);
+            require(_verifyProof(proof, commitments[batch]));
         }
 
         // delete challenge
-        delete challenges[blockHash];
+        delete challenges[batch];
     }
 
     function _verifyProof(bytes calldata proof, bytes32 commitment) internal returns (bool) {
