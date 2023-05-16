@@ -4,7 +4,9 @@ pragma solidity 0.8.15;
 import { CircuitConfig } from "./CircuitConfig.sol";
 import { OptimismPortal } from "./OptimismPortal.sol";
 
-contract ZKEVM is CircuitConfig {
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
+contract ZKEVM is CircuitConfig,OwnableUpgradeable {
     struct BatchData {
         bytes blockWitness;
         bytes32 stateRoot;
@@ -13,7 +15,14 @@ contract ZKEVM is CircuitConfig {
         bytes32 globalExitRoot; // withdraw merkle tree
     }
 
+    struct Staker {
+        address stakeAddress;
+        uint256 stakeAmount;
+    }
+
     OptimismPortal public immutable PORTAL;
+    address public submitter;
+    address public challenger;
 
     // Last batch sent by the sequencers
     uint64 public lastBatchSequenced;
@@ -22,6 +31,7 @@ contract ZKEVM is CircuitConfig {
 
     uint256 public constant MIN_DEPOSIT = 1000000000000000000; // 1 eth
 
+    mapping(address => uint256) public deposits;
     mapping(uint64 => bytes32) public commitments;
     mapping(uint64 => bytes32) public stateRoots;
     mapping(uint64 => uint256) public originTimestamps;
@@ -29,12 +39,27 @@ contract ZKEVM is CircuitConfig {
 
     event SubmitBatches(uint64 indexed numBatch);
 
-    constructor(OptimismPortal _portal) {
-        lastBatchSequenced = 0;
-        PORTAL = _portal;
+    modifier onlySubmitter() {
+        require(msg.sender == submitter.stakeAddress, "Caller not submitter");
+        require(submitter.stakeAmount >=  MIN_DEPOSIT, "Do not have enought deposit");
+        _;
     }
 
-    function submitBatches(BatchData[] calldata batches) external payable{
+    function initialize(OptimismPortal _portal, address _submitter) external payable initializer{
+        __Ownable_init();
+        lastBatchSequenced = 0;
+        PORTAL = _portal;
+        submitter = _submitter;
+        deposits[submitter] += msg.value;
+    }
+
+    function stake() external payable onlySubmitter{
+        require(deposits[submitter] + msg.value >= MIN_DEPOSIT, "Do not have enought deposit");
+        deposits[submitter] += msg.value;
+    }
+
+    function submitBatches(BatchData[] calldata batches) external onlySubmitter{
+        require(deposits[submitter] > MIN_DEPOSIT);
         uint256 batchesNum = batches.length;
         uint64 currentBatchSequenced = lastBatchSequenced;
 
@@ -67,16 +92,17 @@ contract ZKEVM is CircuitConfig {
 
     // challengeState challenges a batch by submitting a deposit.
     function challengeState(uint64 batch) external payable {
+        require(challenger == address(0), "Already in challenge");
         // check challenge window
         bool insideChallengeWindow = originTimestamps[batch] + _WINDOW > block.timestamp;
-        require(insideChallengeWindow);
+        require(insideChallengeWindow, "Cannot challenge batche outside the challenge window");
 
-        uint256 deposit = msg.value;
+        challenger = msg.sender;
 
         // check challenge amount
-        require(deposit >= MIN_DEPOSIT);
-
-        challenges[batch] = deposit;
+        require(msg.value >= MIN_DEPOSIT);
+        deposits[challenger] += msg.value;
+        challenges[batch] = msg.value;
     }
 
     // proveState proves a batch by submitting a proof.
