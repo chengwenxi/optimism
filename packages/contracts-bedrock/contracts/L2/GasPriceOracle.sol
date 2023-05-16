@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 /**
  * @title GasPriceOracle contract
  * @custom:predeploy 0x5300000000000000000000000000000000000002
  * @dev Entrance to the update method for L1 gas prices
  **/
-contract GasPriceOracle is Ownable {
+contract GasPriceOracle is OwnableUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -38,7 +38,14 @@ contract GasPriceOracle is Ownable {
     /**
     * @param _owner Address that will initially own this contract.
     */
-    constructor(address _owner) Ownable() {
+    constructor(address _owner) {
+        initialize(_owner);
+    }
+
+    /**
+      * @notice Initializer.
+     */
+    function initialize(address _owner) public initializer {
         transferOwnership(_owner);
         allowListEnabled = true;
     }
