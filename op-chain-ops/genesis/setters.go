@@ -22,8 +22,9 @@ var (
 	// UntouchablePredeploys are addresses in the predeploy namespace
 	// that should not be touched by the migration process.
 	UntouchablePredeploys = map[common.Address]bool{
-		predeploys.GovernanceTokenAddr: true,
-		predeploys.WETH9Addr:           true,
+		predeploys.L2StandardBridgeAddr: true,
+		predeploys.GovernanceTokenAddr:  true,
+		predeploys.WETH9Addr:            true,
 	}
 
 	// UntouchableCodeHashes represent the bytecode hashes of contracts

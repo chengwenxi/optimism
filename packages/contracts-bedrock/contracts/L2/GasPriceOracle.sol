@@ -36,17 +36,17 @@ contract GasPriceOracle is OwnableUpgradeable {
     event ScalarUpdated(uint256);
 
     /**
-    * @param _owner Address that will initially own this contract.
+    * @param owner_ Address that will initially own this contract.
     */
-    constructor(address _owner) {
-        initialize(_owner);
+    constructor(address owner_) {
+        initialize(owner_);
     }
 
     /**
       * @notice Initializer.
      */
-    function initialize(address _owner) public initializer {
-        transferOwnership(_owner);
+    function initialize(address owner_) public initializer {
+        _transferOwnership(owner_);
         allowListEnabled = true;
     }
 

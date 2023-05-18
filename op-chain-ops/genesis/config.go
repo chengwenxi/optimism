@@ -403,7 +403,6 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 	immutable["GasPriceOracleOwner"] = immutables.ImmutableValues{
 		"owner": config.GasPriceOracleOwner,
 	}
-
 	immutable["L2StandardBridge"] = immutables.ImmutableValues{
 		"otherBridge": config.L1StandardBridgeProxy,
 	}
