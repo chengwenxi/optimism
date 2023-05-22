@@ -31,6 +31,7 @@ bindings: l1block-bindings \
 	optimism-mintable-erc721-factory-bindings \
 	l1-fee-vault-bindings \
 	basefee-vault-bindings \
+	optimism-zkevm-bindings \
 	legacy-erc20-eth-bindings
 
 version:

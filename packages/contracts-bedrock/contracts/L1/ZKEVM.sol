@@ -20,7 +20,7 @@ contract ZKEVM is CircuitConfig,OwnableUpgradeable {
         uint256 stakeAmount;
     }
 
-    OptimismPortal public immutable PORTAL;
+    OptimismPortal public PORTAL;
     address public submitter;
     address public challenger;
 
@@ -40,8 +40,8 @@ contract ZKEVM is CircuitConfig,OwnableUpgradeable {
     event SubmitBatches(uint64 indexed numBatch);
 
     modifier onlySubmitter() {
-        require(msg.sender == submitter.stakeAddress, "Caller not submitter");
-        require(submitter.stakeAmount >=  MIN_DEPOSIT, "Do not have enought deposit");
+        require(msg.sender == submitter, "Caller not submitter");
+        require(deposits[submitter] >=  MIN_DEPOSIT, "Do not have enought deposit");
         _;
     }
 

@@ -1,17 +1,16 @@
-
 // SPDX-License-Identifier: MIT
-pragma solidity <0.9.0;
+pragma solidity 0.8.15;
 contract CircuitConfig {
-  function _getCircuitConfig (uint256 blockGasLimit) internal pure returns (uint256, uint256) {
-    
-    if (blockGasLimit <= 63000) {
-      return (3, 10500);
+    function _getCircuitConfig (uint256 blockGasLimit) internal pure returns (uint256, uint256) {
+
+        if (blockGasLimit <= 63000) {
+            return (3, 10500);
+        }
+
+        if (blockGasLimit <= 300000) {
+            return (14, 69750);
+        }
+
+        revert("CIRCUIT_CONFIG");
     }
-    
-    if (blockGasLimit <= 300000) {
-      return (14, 69750);
-    }
-    
-    revert("CIRCUIT_CONFIG");
-  }
 }
