@@ -32,6 +32,7 @@ var (
 		"L1StandardBridgeProxy",
 		"OptimismPortalProxy",
 		"OptimismMintableERC20FactoryProxy",
+		"ZKEVMProxy",
 	}
 	// portalMeteringSlot is the storage slot containing the metering params.
 	portalMeteringSlot = common.Hash{31: 0x01}
@@ -196,6 +197,24 @@ func BuildL1DeveloperGenesis(config *DeployConfig) (*core.Genesis, error) {
 		return nil, err
 	}
 
+	zkevmABI, err := bindings.ZKEVMMetaData.GetAbi()
+	if err != nil {
+		return nil, err
+	}
+	data, err = zkevmABI.Pack("initialize", predeploys.DevOptimismPortalAddr, config.L2OutputOracleProposer)
+	if err != nil {
+		return nil, fmt.Errorf("cannot abi encode initialize for L1CrossDomainMessenger: %w", err)
+	}
+	if _, err := upgradeProxy(
+		backend,
+		opts,
+		depsByName["ZKEVMProxy"].Address,
+		depsByName["ZKEVM"].Address,
+		data,
+	); err != nil {
+		return nil, err
+	}
+
 	var lastUpgradeTx *types.Transaction
 	if lastUpgradeTx, err = upgradeProxy(
 		backend,
@@ -349,6 +368,9 @@ func deployL1Contracts(config *DeployConfig, backend *backends.SimulatedBackend)
 			Name: "AddressManager",
 		},
 		{
+			Name: "ZKEVM",
+		},
+		{
 			Name: "ProxyAdmin",
 			Args: []interface{}{
 				common.Address{19: 0x01},
@@ -419,6 +441,11 @@ func l1Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		)
 	case "AddressManager":
 		_, tx, _, err = bindings.DeployAddressManager(
+			opts,
+			backend,
+		)
+	case "ZKEVM":
+		_, tx, _, err = bindings.DeployZKEVM(
 			opts,
 			backend,
 		)

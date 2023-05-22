@@ -13,6 +13,7 @@ const (
 	DevWETH9                        = "0x6900000000000000000000000000000000000007"
 	DevL1ERC721Bridge               = "0x6900000000000000000000000000000000000008"
 	DevSystemConfig                 = "0x6900000000000000000000000000000000000009"
+	ZKEVM                           = "0x6900000000000000000000000000000000000010"
 )
 
 var (
@@ -26,6 +27,7 @@ var (
 	DevWETH9Addr                        = common.HexToAddress(DevWETH9)
 	DevL1ERC721BridgeAddr               = common.HexToAddress(DevL1ERC721Bridge)
 	DevSystemConfigAddr                 = common.HexToAddress(DevSystemConfig)
+	ZKEVMAddr                           = common.HexToAddress(ZKEVM)
 
 	DevPredeploys = make(map[string]*common.Address)
 )
@@ -41,4 +43,5 @@ func init() {
 	DevPredeploys["WETH9"] = &DevWETH9Addr
 	DevPredeploys["L1ERC721Bridge"] = &DevL1ERC721BridgeAddr
 	DevPredeploys["SystemConfig"] = &DevSystemConfigAddr
+	DevPredeploys["ZKEVM"] = &ZKEVMAddr
 }
