@@ -117,6 +117,7 @@ func setProxies(db vm.StateDB, proxyAdminAddr common.Address, namespace *big.Int
 	for i := uint64(0); i <= count; i++ {
 		bigAddr := new(big.Int).Or(namespace, new(big.Int).SetUint64(i))
 		addr := common.BigToAddress(bigAddr)
+
 		if UntouchablePredeploys[addr] {
 			log.Info("Skipping setting proxy", "address", addr)
 			continue
@@ -130,6 +131,7 @@ func setProxies(db vm.StateDB, proxyAdminAddr common.Address, namespace *big.Int
 		db.SetState(addr, AdminSlot, proxyAdminAddr.Hash())
 		log.Trace("Set proxy", "address", addr, "admin", proxyAdminAddr)
 	}
+
 	return nil
 }
 
