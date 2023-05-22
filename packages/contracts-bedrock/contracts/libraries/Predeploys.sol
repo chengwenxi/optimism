@@ -9,13 +9,13 @@ library Predeploys {
     /**
      * @notice Address of the L2ToL1MessagePasser predeploy.
      */
-    address internal constant L2_TO_L1_MESSAGE_PASSER = 0x4200000000000000000000000000000000000016;
+    address internal constant L2_TO_L1_MESSAGE_PASSER = 0x5300000000000000000000000000000000000000;
 
     /**
      * @notice Address of the L2CrossDomainMessenger predeploy.
      */
     address internal constant L2_CROSS_DOMAIN_MESSENGER =
-        0x4200000000000000000000000000000000000007;
+    0x4200000000000000000000000000000000000007;
 
     /**
      * @notice Address of the L2StandardBridge predeploy.
@@ -36,13 +36,13 @@ library Predeploys {
      * @notice Address of the OptimismMintableERC20Factory predeploy.
      */
     address internal constant OPTIMISM_MINTABLE_ERC20_FACTORY =
-        0x4200000000000000000000000000000000000012;
+    0x4200000000000000000000000000000000000012;
 
     /**
      * @notice Address of the OptimismMintableERC721Factory predeploy.
      */
     address internal constant OPTIMISM_MINTABLE_ERC721_FACTORY =
-        0x4200000000000000000000000000000000000017;
+    0x4200000000000000000000000000000000000017;
 
     /**
      * @notice Address of the L1Block predeploy.
@@ -53,7 +53,7 @@ library Predeploys {
      * @notice Address of the GasPriceOracle predeploy. Includes fee information
      *         and helpers for computing the L1 portion of the transaction fee.
      */
-    address internal constant GAS_PRICE_ORACLE = 0x420000000000000000000000000000000000000F;
+    address internal constant GAS_PRICE_ORACLE = 0x5300000000000000000000000000000000000002;
 
     /**
      * @custom:legacy

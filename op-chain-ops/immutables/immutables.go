@@ -28,6 +28,9 @@ type ImmutableConfig map[string]ImmutableValues
 // Check does a sanity check that the specific values that
 // Optimism uses are set inside of the ImmutableConfig.
 func (i ImmutableConfig) Check() error {
+	if _, ok := i["GasPriceOracleOwner"]["owner"]; !ok {
+		return errors.New("GasPriceOracleOwner owner not set")
+	}
 	if _, ok := i["L2CrossDomainMessenger"]["otherMessenger"]; !ok {
 		return errors.New("L2CrossDomainMessenger otherMessenger not set")
 	}
@@ -72,6 +75,9 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 	deployments := []deployer.Constructor{
 		{
 			Name: "GasPriceOracle",
+			Args: []interface{}{
+				immutable["GasPriceOracleOwner"]["owner"],
+			},
 		},
 		{
 			Name: "L1Block",
@@ -162,7 +168,11 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 	var err error
 	switch deployment.Name {
 	case "GasPriceOracle":
-		_, tx, _, err = bindings.DeployGasPriceOracle(opts, backend)
+		owner, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for Owner")
+		}
+		_, tx, _, err = bindings.DeployGasPriceOracle(opts, backend, owner)
 	case "L1Block":
 		// No arguments required for the L1Block contract
 		_, tx, _, err = bindings.DeployL1Block(opts, backend)

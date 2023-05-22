@@ -9,7 +9,7 @@ import { Semver } from "../universal/Semver.sol";
 
 /**
  * @custom:proxied
- * @custom:predeploy 0x4200000000000000000000000000000000000016
+ * @custom:predeploy 0x5300000000000000000000000000000000000000
  * @title L2ToL1MessagePasser
  * @notice The L2ToL1MessagePasser is a dedicated contract where messages that are being sent from
  *         L2 to L1 can be stored. The storage root of this contract is pulled up to the top level
@@ -36,6 +36,18 @@ contract L2ToL1MessagePasser is Semver {
      */
     uint240 internal msgNonce;
 
+    /// @dev The maximum height of the withdraw merkle tree.
+    uint256 private constant MAX_TREE_HEIGHT = 40;
+
+    /// @notice The merkle root of the current merkle tree.
+    /// @dev This is actual equal to `branches[n]`.
+    bytes32 public messageRoot;
+
+    /// @notice The list of zero hash in each height.
+    bytes32[MAX_TREE_HEIGHT] private zeroHashes;
+
+    bytes32[MAX_TREE_HEIGHT] public branches;
+
     /**
      * @notice Emitted any time a withdrawal is initiated.
      *
@@ -46,6 +58,7 @@ contract L2ToL1MessagePasser is Semver {
      * @param gasLimit       The minimum amount of gas that must be provided when withdrawing.
      * @param data           The data to be forwarded to the target on L1.
      * @param withdrawalHash The hash of the withdrawal.
+     * @param rootHash       The root hash of the merkle tree after the withdrawal is included.
      */
     event MessagePassed(
         uint256 indexed nonce,
@@ -54,7 +67,8 @@ contract L2ToL1MessagePasser is Semver {
         uint256 value,
         uint256 gasLimit,
         bytes data,
-        bytes32 withdrawalHash
+        bytes32 withdrawalHash,
+        bytes32 rootHash
     );
 
     /**
@@ -120,12 +134,9 @@ contract L2ToL1MessagePasser is Semver {
             msg.value,
             _gasLimit,
             _data,
-            withdrawalHash
+            withdrawalHash,
+            rootHash
         );
-
-        unchecked {
-            ++msgNonce;
-        }
     }
 
     /**
@@ -137,5 +148,52 @@ contract L2ToL1MessagePasser is Semver {
      */
     function messageNonce() public view returns (uint256) {
         return Encoding.encodeVersionedNonce(msgNonce, MESSAGE_VERSION);
+    }
+
+    function _initializeMerkleTree() internal {
+        // Compute hashes in empty sparse Merkle tree
+        for (uint256 height = 0; height + 1 < MAX_TREE_HEIGHT; height++) {
+            zeroHashes[height + 1] = _efficientHash(zeroHashes[height], zeroHashes[height]);
+        }
+    }
+
+    function _appendMessageHash(bytes32 _messageHash) internal returns (bytes32) {
+        uint240 _currentMessageIndex = msgNonce;
+        bytes32 _hash = _messageHash;
+        uint256 _height = 0;
+        // @todo it can be optimized, since we only need the newly added branch.
+        while (_currentMessageIndex != 0) {
+            if (_currentMessageIndex % 2 == 0) {
+                // it may be used in next round.
+                branches[_height] = _hash;
+                // it's a left child, the right child must be null
+                _hash = _efficientHash(_hash, zeroHashes[_height]);
+            } else {
+                // it's a right child, use previously computed hash
+                _hash = _efficientHash(branches[_height], _hash);
+            }
+            unchecked {
+                _height += 1;
+            }
+            _currentMessageIndex >>= 1;
+        }
+
+        branches[_height] = _hash;
+        messageRoot = _hash;
+
+        _currentMessageIndex = msgNonce;
+        unchecked {
+            msgNonce = _currentMessageIndex + 1;
+        }
+        return _hash;
+    }
+
+    function _efficientHash(bytes32 a, bytes32 b) private pure returns (bytes32 value) {
+        // solhint-disable-next-line no-inline-assembly
+        assembly {
+            mstore(0x00, a)
+            mstore(0x20, b)
+            value := keccak256(0x00, 0x40)
+        }
     }
 }

@@ -98,6 +98,8 @@ type DeployConfig struct {
 	GasPriceOracleOverhead uint64 `json:"gasPriceOracleOverhead"`
 	// The initial value of the gas scalar
 	GasPriceOracleScalar uint64 `json:"gasPriceOracleScalar"`
+	// The initial value of the gasOracle owner
+	GasPriceOracleOwner common.Address `json:"gasPriceOracleOwner"`
 	// The ERC20 symbol of the GovernanceToken
 	GovernanceTokenSymbol string `json:"governanceTokenSymbol"`
 	// The ERC20 name of the GovernanceToken
@@ -183,6 +185,9 @@ func (d *DeployConfig) Check() error {
 	}
 	if d.GasPriceOracleScalar == 0 {
 		return fmt.Errorf("%w: GasPriceOracleScalar cannot be 0", ErrInvalidDeployConfig)
+	}
+	if d.GasPriceOracleOwner == (common.Address{}) {
+		return fmt.Errorf("%w: GasPriceOracleOwner cannot be address(0)", ErrInvalidDeployConfig)
 	}
 	if d.L1StandardBridgeProxy == (common.Address{}) {
 		return fmt.Errorf("%w: L1StandardBridgeProxy cannot be address(0)", ErrInvalidDeployConfig)
@@ -395,6 +400,9 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 		return immutable, fmt.Errorf("L1FeeVaultRecipient cannot be address(0): %w", ErrInvalidImmutablesConfig)
 	}
 
+	immutable["GasPriceOracleOwner"] = immutables.ImmutableValues{
+		"owner": config.GasPriceOracleOwner,
+	}
 	immutable["L2StandardBridge"] = immutables.ImmutableValues{
 		"otherBridge": config.L1StandardBridgeProxy,
 	}
@@ -434,6 +442,12 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		return storage, errors.New("block base fee not set")
 	}
 
+	storage["GasPriceOracle"] = state.StorageValues{
+		"_owner":           config.GasPriceOracleOwner,
+		"allowListEnabled": true,
+		"_initialized":     1,
+		"_initializing":    false,
+	}
 	storage["L2ToL1MessagePasser"] = state.StorageValues{
 		"msgNonce": 0,
 	}

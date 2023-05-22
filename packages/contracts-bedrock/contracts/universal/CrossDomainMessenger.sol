@@ -170,6 +170,8 @@ abstract contract CrossDomainMessenger is
      */
     mapping(bytes32 => bool) public successfulMessages;
 
+    uint256 public receiveNonce;
+
     /**
      * @notice Address of the sender of the currently executing message on the other chain. If the
      *         value of this variable is the default value (0x00000000...dead) then no message is
@@ -410,6 +412,8 @@ abstract contract CrossDomainMessenger is
                 revert("CrossDomainMessenger: failed to relay message");
             }
         }
+
+        receiveNonce = _nonce;
     }
 
     /**

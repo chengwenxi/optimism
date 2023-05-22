@@ -297,7 +297,6 @@ abstract contract StandardBridge {
         uint256 _amount,
         bytes calldata _extraData
     ) public payable onlyOtherBridge {
-        require(msg.value == _amount, "StandardBridge: amount sent does not match amount required");
         require(_to != address(this), "StandardBridge: cannot send to self");
         require(_to != address(MESSENGER), "StandardBridge: cannot send to messenger");
 
@@ -452,8 +451,8 @@ abstract contract StandardBridge {
      */
     function _isOptimismMintableERC20(address _token) internal view returns (bool) {
         return
-            ERC165Checker.supportsInterface(_token, type(ILegacyMintableERC20).interfaceId) ||
-            ERC165Checker.supportsInterface(_token, type(IOptimismMintableERC20).interfaceId);
+        ERC165Checker.supportsInterface(_token, type(ILegacyMintableERC20).interfaceId) ||
+        ERC165Checker.supportsInterface(_token, type(IOptimismMintableERC20).interfaceId);
     }
 
     /**

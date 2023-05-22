@@ -30,6 +30,7 @@ bindings: l1block-bindings \
 	optimism-mintable-erc721-factory-bindings \
 	l1-fee-vault-bindings \
 	basefee-vault-bindings \
+	optimism-zkevm-bindings \
 	legacy-erc20-eth-bindings
 
 version:
@@ -52,6 +53,9 @@ l1-standard-bridge-bindings: compile
 
 optimism-portal-bindings: compile
 	./gen_bindings.sh contracts/L1/OptimismPortal.sol:OptimismPortal $(pkg)
+
+optimism-zkevm-bindings: compile
+	./gen_bindings.sh contracts/L1/ZKEVM.sol:ZKEVM $(pkg)
 
 l2-output-oracle-bindings: compile
 	./gen_bindings.sh contracts/L1/L2OutputOracle.sol:L2OutputOracle $(pkg)
@@ -126,7 +130,7 @@ more:
 	go run ./gen/main.go \
 		-artifacts ../packages/contracts-bedrock/artifacts \
 		-out ./bindings \
-		-contracts SystemConfig,OptimismMintableERC20Factory,L2StandardBridge,L1BlockNumber,LegacyMessagePasser,DeployerWhitelist,Proxy,OptimismPortal,L2ToL1MessagePasser,L2CrossDomainMessenger,SequencerFeeVault,L1Block,LegacyERC20ETH,WETH9,GovernanceToken,L1CrossDomainMessenger,L2ERC721Bridge,OptimismMintableERC721Factory,ProxyAdmin \
+		-contracts GasPriceOracle,SystemConfig,OptimismMintableERC20Factory,L2StandardBridge,L1BlockNumber,LegacyMessagePasser,DeployerWhitelist,Proxy,OptimismPortal,L2ToL1MessagePasser,L2CrossDomainMessenger,SequencerFeeVault,L1Block,LegacyERC20ETH,WETH9,GovernanceToken,L1CrossDomainMessenger,L2ERC721Bridge,OptimismMintableERC721Factory,ProxyAdmin \
 		-package bindings
 
 mkdir:
