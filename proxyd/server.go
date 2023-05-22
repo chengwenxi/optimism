@@ -2,6 +2,8 @@ package proxyd
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -221,6 +223,9 @@ func (s *Server) Shutdown() {
 	}
 	if s.wsServer != nil {
 		_ = s.wsServer.Shutdown(context.Background())
+	}
+	for _, bg := range s.BackendGroups {
+		bg.Shutdown()
 	}
 }
 
@@ -576,7 +581,7 @@ func (s *Server) populateContext(w http.ResponseWriter, r *http.Request) context
 			return nil
 		}
 
-		ctx = context.WithValue(r.Context(), ContextKeyAuth, s.authenticatedPaths[authorization]) // nolint:staticcheck
+		ctx = context.WithValue(ctx, ContextKeyAuth, s.authenticatedPaths[authorization]) // nolint:staticcheck
 	}
 
 	return context.WithValue(
@@ -584,6 +589,14 @@ func (s *Server) populateContext(w http.ResponseWriter, r *http.Request) context
 		ContextKeyReqID, // nolint:staticcheck
 		randStr(10),
 	)
+}
+
+func randStr(l int) string {
+	b := make([]byte, l)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
 }
 
 func (s *Server) isUnlimitedOrigin(origin string) bool {
