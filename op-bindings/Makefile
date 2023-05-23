@@ -11,7 +11,6 @@ bindings: l1block-bindings \
 	l1-standard-bridge-bindings \
 	l2-to-l1-message-passer-bindings \
 	optimism-portal-bindings \
-	optimism-zkevm-bindings \
 	l2-output-oracle-bindings \
 	gas-price-oracle-bindings \
 	legacy-message-passer-bindings \
@@ -31,6 +30,7 @@ bindings: l1block-bindings \
 	optimism-mintable-erc721-factory-bindings \
 	l1-fee-vault-bindings \
 	basefee-vault-bindings \
+	optimism-zkevm-bindings \
 	legacy-erc20-eth-bindings
 
 version:

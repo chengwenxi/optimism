@@ -451,8 +451,8 @@ abstract contract StandardBridge {
      */
     function _isOptimismMintableERC20(address _token) internal view returns (bool) {
         return
-            ERC165Checker.supportsInterface(_token, type(ILegacyMintableERC20).interfaceId) ||
-            ERC165Checker.supportsInterface(_token, type(IOptimismMintableERC20).interfaceId);
+        ERC165Checker.supportsInterface(_token, type(ILegacyMintableERC20).interfaceId) ||
+        ERC165Checker.supportsInterface(_token, type(IOptimismMintableERC20).interfaceId);
     }
 
     /**
