@@ -294,15 +294,16 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         // on L2. If this is true, under the assumption that the SecureMerkleTrie does not have
         // bugs, then we know that this withdrawal was actually triggered on L2 and can therefore
         // be relayed on L1.
-        require(
-            SecureMerkleTrie.verifyInclusionProof(
-                abi.encode(storageKey),
-                hex"01",
-                _withdrawalProof,
-                _outputRootProof.messagePasserStorageRoot
-            ),
-            "OptimismPortal: invalid withdrawal inclusion proof"
-        );
+        // todo: verify the smt proof
+//        require(
+//            SecureMerkleTrie.verifyInclusionProof(
+//                abi.encode(storageKey),
+//                hex"01",
+//                _withdrawalProof,
+//                _outputRootProof.messagePasserStorageRoot
+//            ),
+//            "OptimismPortal: invalid withdrawal inclusion proof"
+//        );
 
         // Designate the withdrawalHash as proven by storing the `outputRoot`, `timestamp`, and
         // `l2BlockNumber` in the `provenWithdrawals` mapping. A `withdrawalHash` can only be
