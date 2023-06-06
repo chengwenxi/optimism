@@ -6,7 +6,7 @@ temp
 coverage.json
 *.tsbuildinfo
 **/lcov.info
-.vscode
+#.vscode
 
 yarn-error.log
 .yarn/*
