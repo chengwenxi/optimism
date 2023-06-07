@@ -31,6 +31,7 @@ import { LegacyMintableERC20 } from "../legacy/LegacyMintableERC20.sol";
 import { SystemConfig } from "../L1/SystemConfig.sol";
 import { ResourceMetering } from "../L1/ResourceMetering.sol";
 import { Constants } from "../libraries/Constants.sol";
+import { ZKEVM } from "../L1/ZKEVM.sol";
 
 contract CommonTest is Test {
     address alice = address(128);
@@ -200,6 +201,35 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
         );
         op = OptimismPortal(payable(address(proxy)));
         vm.label(address(op), "OptimismPortal");
+    }
+}
+
+contract ZKEVM_Initializer is Portal_Initializer {
+    AddressManager internal addressManager;
+    ZKEVM internal zkevmImpl;
+    ZKEVM internal zkevm;
+
+    event ChallengeState(uint256 indexed batchIndex, address challenger, uint256 challengeDeposit);
+    event SubmitBatches(uint64 indexed numBatch);
+    event ChallengeRes(uint256 indexed batchIndex, address winner, string res);
+
+    function setUp() public virtual override {
+        super.setUp();
+        // Deploy the address manager
+        vm.prank(multisig);
+        addressManager = new AddressManager();
+        // Deploy zkevm impl
+        zkevmImpl = new ZKEVM(op, alice, bob);
+
+        Proxy proxy = new Proxy(multisig);
+        vm.prank(multisig);
+        proxy.upgradeToAndCall(
+            address(zkevmImpl),
+            abi.encodeWithSelector(ZKEVM.initialize.selector, op, alice, bob)
+        );
+
+        zkevm = ZKEVM(payable(address(proxy)));
+        vm.label(address(zkevm), "ZKEVM");
     }
 }
 
