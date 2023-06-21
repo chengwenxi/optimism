@@ -13,7 +13,7 @@ contract OptimismPortal_Invariant_Harness is Portal_Initializer {
     bytes32 _storageRoot;
     bytes32 _outputRoot;
     bytes32 _withdrawalHash;
-    bytes[] _withdrawalProof;
+    bytes32[_TREE_DEPTH] _withdrawalProof;
     Types.OutputRootProof internal _outputRootProof;
 
     function setUp() public virtual override {

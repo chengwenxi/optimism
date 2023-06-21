@@ -410,7 +410,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Portal_Initializer {
     bytes32 _storageRoot;
     bytes32 _outputRoot;
     bytes32 _withdrawalHash;
-    bytes[] _withdrawalProof;
+    bytes32[_TREE_DEPTH] _withdrawalProof;
     Types.OutputRootProof internal _outputRootProof;
 
     // Use a constructor to set the storage vars above, so as to minimize the number of ffi calls.
@@ -928,7 +928,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Portal_Initializer {
         });
 
         // Get updated proof inputs.
-        (bytes32 stateRoot, bytes32 storageRoot, , , bytes[] memory withdrawalProof) = ffi
+        (bytes32 stateRoot, bytes32 storageRoot, , , bytes32[_TREE_DEPTH] memory withdrawalProof) = ffi
             .getProveWithdrawalTransactionInputs(insufficientGasTx);
         Types.OutputRootProof memory outputRootProof = Types.OutputRootProof({
             version: bytes32(0),
@@ -978,7 +978,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Portal_Initializer {
             bytes32 storageRoot,
             bytes32 outputRoot,
             bytes32 withdrawalHash,
-            bytes[] memory withdrawalProof
+            bytes32[_TREE_DEPTH] memory withdrawalProof
         ) = ffi.getProveWithdrawalTransactionInputs(_testTx);
         Types.OutputRootProof memory outputRootProof = Types.OutputRootProof({
             version: bytes32(0),
@@ -1055,7 +1055,7 @@ contract OptimismPortal_FinalizeWithdrawal_Test is Portal_Initializer {
             bytes32 storageRoot,
             bytes32 outputRoot,
             bytes32 withdrawalHash,
-            bytes[] memory withdrawalProof
+            bytes32[_TREE_DEPTH] memory withdrawalProof
         ) = ffi.getProveWithdrawalTransactionInputs(_tx);
 
         // Create the output root proof
