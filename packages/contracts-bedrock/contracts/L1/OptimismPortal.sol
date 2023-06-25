@@ -315,26 +315,31 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver, Verify {
             )
         );
 
-        // get latest withdrawRootHash from zkevms
-        // bytes32 _withdrawRoot = zkevm
-        //     .storageBatchs(zkevm.lastBatchSequenced() - 1)
-        //     .withdrawRoot;
-
-        // (bytes32 _withdrawRoot, , , ) = zkevm.storageBatchs(
-        //     zkevm.lastBatchSequenced() - 1
-        // );
+        // get withdrawRoot for withdraw proof verify
+//        (bytes32 _prewithdrawRoot, , , ) = zkevm.storageBatchs(
+//            zkevm.lastBatchSequenced() - 1
+//        );
+//        (bytes32 _withdrawRoot, , , ) = zkevm.storageBatchs(
+//            zkevm.lastBatchSequenced() - 1
+//        );
         // Verify that the hash of this withdrawal was stored in the L2toL1MessagePasser contract
         // on L2. If this is true, under the assumption that the SecureMerkleTrie does not have
         // bugs, then we know that this withdrawal was actually triggered on L2 and can therefore
         // be relayed on L1.
         require(
-            // verifyMerkleProof(
-            //     withdrawalHash,
-            //     _withdrawalProof,
-            //     _tx.nonce,
-            //     _withdrawRoot
-            // ),
-            true,
+//            verifyMerkleProof(
+//                withdrawalHash,
+//                _withdrawalProof,
+//                _tx.nonce,
+//                _withdrawRoot
+//            ) ||
+//                verifyMerkleProof(
+//                    withdrawalHash,
+//                    _withdrawalProof,
+//                    _tx.nonce,
+//                    _prewithdrawRoot
+//                ),
+             true,
             "OptimismPortal: invalid withdrawal inclusion proof"
         );
 

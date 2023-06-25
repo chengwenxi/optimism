@@ -3,8 +3,8 @@ package predeploys
 import "github.com/ethereum/go-ethereum/common"
 
 const (
-	L2ToL1MessagePasser = "0x5300000000000000000000000000000000000000"
-	GasPriceOracle      = "0x5300000000000000000000000000000000000002"
+	L2ToL1MessagePasser = "0x5300000000000000000000000000000000000001"
+	GasPriceOracle      = "0x530000000000000000000000000000000000000F"
 
 	DeployerWhitelist             = "0x4200000000000000000000000000000000000002"
 	LegacyERC20ETH                = "0xDeadDeAddeAddEAddeadDEaDDEAdDeaDDeAD0000"

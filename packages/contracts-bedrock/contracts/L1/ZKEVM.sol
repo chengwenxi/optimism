@@ -9,9 +9,9 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract ZKEVM is CircuitConfig, OwnableUpgradeable {
     struct BatchData {
-        uint64 blockNumbers; // Block numbers
+        uint64 blockNumber; // Block number
         bytes transactions; // RLP encoded transactions
-        bytes blockWitness; // Contains each block
+        bytes blockWitnes; // Contains each block
         bytes32 preStateRoot; // Pre-state root
         bytes32 withdrawRoot; // withdraw trie tree
         BatchSignature signature; // Signature of the batch
@@ -23,6 +23,7 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
     }
 
     struct BatchStore {
+        uint64 blockNumber;
         bytes32 withdrawRoot;
         bytes32 commitment;
         bytes32 stateRoot;
@@ -48,6 +49,7 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
 
     // Last batch sent by the sequencers
     uint64 public lastBatchSequenced;
+    uint64 public lastL2BlockNumber;
 
     uint256 public constant PROOF_WINDOW = 100;
     uint256 public constant FINALIZATION_PERIOD_SECONDS = 100000;
@@ -56,6 +58,7 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
     mapping(address => uint256) public deposits;
 
     // commitments stateRoots originTimestamps to BatchStore
+    mapping(bytes32 => uint256) public withdrawRoots;
     mapping(uint64 => BatchStore) public storageBatchs;
     mapping(uint64 => bool) public confirmBatchIndex;
     mapping(uint64 => BatchChallenge) public challenges; // batchIndex  => Batch
@@ -128,30 +131,30 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
 
             require(
                 batches[i].preStateRoot ==
-                    storageBatchs[currentBatchSequenced].stateRoot,
+                storageBatchs[currentBatchSequenced].stateRoot,
                 "Preview state root not equal"
             );
             uint256[] memory publicInput = _buildCommitment(
                 MAX_TXS,
                 MAX_CALLDATA,
                 chainId,
-                batches[i].blockWitness,
+                batches[i].blockWitnes,
                 true
             );
 
             bytes32 stateRoot = _getStateRoot(
-                batches[i].blockWitness,
-                batches[i].blockNumbers
+                batches[i].blockWitnes,
+                batches[i].blockNumber
             );
 
             bytes32 commitmentHash;
             assembly {
                 commitmentHash := keccak256(
-                    add(publicInput, 32),
-                    mul(mload(publicInput), 32)
+                add(publicInput, 32),
+                mul(mload(publicInput), 32)
                 )
             }
-
+            withdrawRoots[batches[i].withdrawRoot] = block.timestamp;
             storageBatchs[currentBatchSequenced] = BatchStore(
                 batches[i].withdrawRoot,
                 commitmentHash,
@@ -161,6 +164,7 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
             currentBatchSequenced++;
         }
         lastBatchSequenced = currentBatchSequenced;
+        lastL2BlockNumber = batches[batchesNum - 1].blockNumber;
 
         emit SubmitBatches(lastBatchSequenced);
     }
@@ -168,8 +172,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
     function confirmBatch(uint64 batchIndex) public {
         require(!isBatchInChallenge(batchIndex));
         bool insideChallengeWindow = storageBatchs[batchIndex].originTimestamp +
-            FINALIZATION_PERIOD_SECONDS >
-            block.timestamp;
+        FINALIZATION_PERIOD_SECONDS >
+        block.timestamp;
         require(
             !insideChallengeWindow,
             "Cannot confirm batch inside the challenge window"
@@ -192,8 +196,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
         // check challenge window
         // todo get finalization period from output oracle
         bool insideChallengeWindow = storageBatchs[batchIndex].originTimestamp +
-            FINALIZATION_PERIOD_SECONDS >
-            block.timestamp;
+        FINALIZATION_PERIOD_SECONDS >
+        block.timestamp;
         require(
             insideChallengeWindow,
             "Cannot challenge batch outside the challenge window"
@@ -218,8 +222,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
         require(challenges[batchIndex].challenger != address(0));
         require(!challenges[batchIndex].finished, "Challenge already finished");
         bool insideChallengeWindow = challenges[batchIndex].startTime +
-            PROOF_WINDOW >
-            block.timestamp;
+        PROOF_WINDOW >
+        block.timestamp;
         if (!insideChallengeWindow) {
             _challengerWin(batchIndex, "timeout");
             // todo pause PORTAL contracts
@@ -262,8 +266,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
             if (msg.sender == submitter && lastBatchSequenced != 0) {
                 require(
                     storageBatchs[lastBatchSequenced].originTimestamp +
-                        FINALIZATION_PERIOD_SECONDS <=
-                        block.timestamp,
+                    FINALIZATION_PERIOD_SECONDS <=
+                    block.timestamp,
                     "submitter should wait batch to be confirm"
                 );
             }
@@ -297,8 +301,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
 
     function isBatchInChallenge(uint64 batchIndex) public view returns (bool) {
         return
-            challenges[batchIndex].challenger != address(0) &&
-            !challenges[batchIndex].finished;
+        challenges[batchIndex].challenger != address(0) &&
+        !challenges[batchIndex].finished;
     }
 
     function isUserInChallenge(address user) public view returns (bool) {
@@ -331,8 +335,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
     }
 
     function _getStateRoot(
-        bytes calldata blockWitness,
-        uint64 blockNumbers
+        bytes calldata blockWitnes,
+        uint64 blockNumber
     ) internal pure returns (bytes32) {
         // TODO
         return bytes32(0);

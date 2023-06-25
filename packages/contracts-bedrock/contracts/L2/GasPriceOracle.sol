@@ -5,7 +5,7 @@ import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/O
 
 /**
  * @title GasPriceOracle contract
- * @custom:predeploy 0x5300000000000000000000000000000000000002
+ * @custom:predeploy 0x530000000000000000000000000000000000000F
  * @dev Entrance to the update method for L1 gas prices
  **/
 contract GasPriceOracle is OwnableUpgradeable {

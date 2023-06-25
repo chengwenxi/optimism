@@ -67,7 +67,7 @@ func FundDevAccounts(db vm.StateDB) {
 // can be set in state and the ProxyAdmin can be set as the admin of the
 // Proxy.
 func SetL2Proxies(db vm.StateDB) error {
-	err := setProxies(db, predeploys.ProxyAdminAddr, bigL2PredeployNamespace_53, 8)
+	err := setProxies(db, predeploys.ProxyAdminAddr, bigL2PredeployNamespace_53, 16)
 	if err != nil {
 		return err
 	}
@@ -233,6 +233,9 @@ func setupPredeploy(db vm.StateDB, deployResults immutables.DeploymentResults, s
 	if bytecode, ok := deployResults[name]; ok {
 		log.Info("Setting deployed bytecode with immutables", "name", name, "address", implAddr)
 		db.SetCode(implAddr, bytecode)
+		if name == "" {
+			fmt.Println("")
+		}
 	} else {
 		depBytecode, err := bindings.GetDeployedBytecode(name)
 		if err != nil {
