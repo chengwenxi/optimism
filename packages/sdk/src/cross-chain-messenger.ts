@@ -30,6 +30,7 @@ import {
 } from '@eth-optimism/core-utils'
 import { getContractInterface, predeploys } from '@eth-optimism/contracts'
 import * as rlp from 'rlp'
+import axios from 'axios'
 
 import {
   OEContracts,
@@ -72,7 +73,14 @@ import {
   hashMessageHash,
 } from './utils'
 
+export interface WithdrawMessageProof {
+  withdrawIndex: BigNumber
+  withdrawProof: string[]
+  withdrawRoot: string
+}
+
 export class CrossChainMessenger {
+  public backendUrl: string
   /**
    * Provider connected to the L1 chain.
    */
@@ -126,6 +134,7 @@ export class CrossChainMessenger {
    * @param opts.l2SignerOrProvider Signer or Provider for the L2 chain, or a JSON-RPC url.
    * @param opts.l1ChainId Chain ID for the L1 chain.
    * @param opts.l2ChainId Chain ID for the L2 chain.
+   * @param opts.backendUrl backend for withdraw proof gen.
    * @param opts.depositConfirmationBlocks Optional number of blocks before a deposit is confirmed.
    * @param opts.l1BlockTimeSeconds Optional estimated block time in seconds for the L1 chain.
    * @param opts.contracts Optional contract address overrides.
@@ -137,12 +146,14 @@ export class CrossChainMessenger {
     l2SignerOrProvider: SignerOrProviderLike
     l1ChainId: NumberLike
     l2ChainId: NumberLike
+    backendUrl?: string
     depositConfirmationBlocks?: NumberLike
     l1BlockTimeSeconds?: NumberLike
     contracts?: DeepPartial<OEContractsLike>
     bridges?: BridgeAdapterData
     bedrock?: boolean
   }) {
+    this.backendUrl = opts.backendUrl ?? 'http://localhost:8000/getProof'
     this.bedrock = opts.bedrock ?? false
 
     if (!this.bedrock) {
@@ -672,10 +683,16 @@ export class CrossChainMessenger {
             await this.contracts.l1.OptimismPortal.provenWithdrawals(
               hashLowLevelMessage(withdrawal)
             )
+          // ZKEVM roll up check
+          const latestL2BlockNum =
+            await this.contracts.l1.ZKEVM.lastL2BlockNumber()
 
           // If the withdrawal hash has not been proven on L1,
           // return `READY_TO_PROVE`
-          if (provenWithdrawal.timestamp.eq(BigNumber.from(0))) {
+          if (
+            provenWithdrawal.timestamp.eq(BigNumber.from(0)) ||
+            latestL2BlockNum < output.l2BlockNumber
+          ) {
             return MessageStatus.READY_TO_PROVE
           }
 
@@ -1400,6 +1417,53 @@ export class CrossChainMessenger {
   }
 
   /**
+   * Generates the bedrock proof required to finalize an L2 to L1 message.
+   *
+   * @param message Message to generate a proof for.
+   * @returns Proof that can be used to finalize the message.
+   */
+  public async getWithdrawMessageProof(
+    message: MessageLike
+  ): Promise<WithdrawMessageProof> {
+    const resolved = await this.toCrossChainMessage(message)
+    if (resolved.direction === MessageDirection.L1_TO_L2) {
+      throw new Error(`can only generate proofs for L2 to L1 messages`)
+    }
+
+    const output = await this.getMessageBedrockOutput(resolved)
+    if (output === null) {
+      throw new Error(`state root for message not yet published`)
+    }
+
+    const withdrawal = await this.toLowLevelMessage(resolved)
+    const hash = hashLowLevelMessage(withdrawal)
+
+    let withdrawIndex
+    let withdrawProof
+    let withdrawRoot
+    await axios
+      .get(this.backendUrl, {
+        params: {
+          nonce: withdrawal.messageNonce,
+        },
+      })
+      .then((response) => {
+        withdrawIndex = response.data.index
+        withdrawProof = response.data.proof
+        withdrawRoot = response.data.root
+      })
+      .catch((error) => {
+        throw new Error(`can not get proof from ${this.backendUrl}`)
+      })
+
+    return {
+      withdrawIndex,
+      withdrawProof,
+      withdrawRoot,
+    }
+  }
+
+  /**
    * Sends a given cross chain message. Where the message is sent depends on the direction attached
    * to the message itself.
    *
@@ -1775,8 +1839,9 @@ export class CrossChainMessenger {
       }
 
       const withdrawal = await this.toLowLevelMessage(resolved)
-      const proof = await this.getBedrockMessageProof(resolved)
 
+      const proof = await this.getBedrockMessageProof(resolved)
+      const withdrawVerify = await this.getWithdrawMessageProof(resolved)
       const args = [
         [
           withdrawal.messageNonce,
@@ -1793,7 +1858,8 @@ export class CrossChainMessenger {
           proof.outputRootProof.messagePasserStorageRoot,
           proof.outputRootProof.latestBlockhash,
         ],
-        proof.withdrawalProof,
+        withdrawVerify.withdrawProof,
+        withdrawVerify.withdrawRoot,
         opts?.overrides || {},
       ] as const
 

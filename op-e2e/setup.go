@@ -79,6 +79,8 @@ func DefaultSystemConfig(t *testing.T) SystemConfig {
 		BatchInboxAddress:         common.Address{0: 0x52, 19: 0xff}, // tbd
 		BatchSenderAddress:        addresses.Batcher,
 
+		ZKEVMSubmitter: common.Address{}, // tbd
+
 		L2OutputOracleSubmissionInterval: 4,
 		L2OutputOracleStartingTimestamp:  -1,
 		L2OutputOracleProposer:           addresses.Proposer,

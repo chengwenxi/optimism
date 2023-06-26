@@ -42,6 +42,8 @@ type DeployConfig struct {
 	BatchInboxAddress         common.Address `json:"batchInboxAddress"`
 	BatchSenderAddress        common.Address `json:"batchSenderAddress"`
 
+	ZKEVMSubmitter common.Address `json:"zkevmSubmitter"`
+
 	L2OutputOracleSubmissionInterval uint64         `json:"l2OutputOracleSubmissionInterval"`
 	L2OutputOracleStartingTimestamp  int            `json:"l2OutputOracleStartingTimestamp"`
 	L2OutputOracleProposer           common.Address `json:"l2OutputOracleProposer"`
@@ -152,6 +154,9 @@ func (d *DeployConfig) Check() error {
 	}
 	if d.BatchSenderAddress == (common.Address{}) {
 		return fmt.Errorf("%w: BatchSenderAddress cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.ZKEVMSubmitter == (common.Address{}) {
+		return fmt.Errorf("%w: ZKEVMSubmitter cannot be address(0)", ErrInvalidDeployConfig)
 	}
 	if d.L2OutputOracleSubmissionInterval == 0 {
 		return fmt.Errorf("%w: L2OutputOracleSubmissionInterval cannot be 0", ErrInvalidDeployConfig)

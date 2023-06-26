@@ -201,7 +201,7 @@ func BuildL1DeveloperGenesis(config *DeployConfig) (*core.Genesis, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err = zkevmABI.Pack("initialize", config.L2OutputOracleProposer, config.L2OutputOracleChallenger)
+	data, err = zkevmABI.Pack("initialize", config.ZKEVMSubmitter, config.L2OutputOracleChallenger)
 	if err != nil {
 		return nil, fmt.Errorf("cannot abi encode initialize for L1CrossDomainMessenger: %w", err)
 	}

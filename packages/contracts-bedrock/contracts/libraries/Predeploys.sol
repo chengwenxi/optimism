@@ -12,6 +12,12 @@ library Predeploys {
     address internal constant L2_TO_L1_MESSAGE_PASSER = 0x5300000000000000000000000000000000000001;
 
     /**
+     * @notice Address of the GasPriceOracle predeploy. Includes fee information
+     *         and helpers for computing the L1 portion of the transaction fee.
+     */
+    address internal constant GAS_PRICE_ORACLE = 0x530000000000000000000000000000000000000f;
+
+    /**
      * @notice Address of the L2CrossDomainMessenger predeploy.
      */
     address internal constant L2_CROSS_DOMAIN_MESSENGER =
@@ -48,12 +54,6 @@ library Predeploys {
      * @notice Address of the L1Block predeploy.
      */
     address internal constant L1_BLOCK_ATTRIBUTES = 0x4200000000000000000000000000000000000015;
-
-    /**
-     * @notice Address of the GasPriceOracle predeploy. Includes fee information
-     *         and helpers for computing the L1 portion of the transaction fee.
-     */
-    address internal constant GAS_PRICE_ORACLE = 0x530000000000000000000000000000000000000F;
 
     /**
      * @custom:legacy

@@ -264,7 +264,8 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver, Verify {
         Types.WithdrawalTransaction memory _tx,
         uint256 _l2OutputIndex,
         Types.OutputRootProof calldata _outputRootProof,
-        bytes32[32] calldata _withdrawalProof
+        bytes32[32] calldata _withdrawalProof,
+        bytes32 _withdrawalRoot
     ) external whenNotPaused {
         // Prevent users from creating a deposit transaction where this address is the message
         // sender on L2. Because this is checked here, we do not need to check again in
@@ -316,30 +317,23 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver, Verify {
         );
 
         // get withdrawRoot for withdraw proof verify
-//        (bytes32 _prewithdrawRoot, , , ) = zkevm.storageBatchs(
-//            zkevm.lastBatchSequenced() - 1
-//        );
-//        (bytes32 _withdrawRoot, , , ) = zkevm.storageBatchs(
-//            zkevm.lastBatchSequenced() - 1
-//        );
+        require(
+            zkevm.withdrawRoots(_withdrawalRoot) > 0,
+            "Did not submit withdrawRoot"
+        );
+
         // Verify that the hash of this withdrawal was stored in the L2toL1MessagePasser contract
         // on L2. If this is true, under the assumption that the SecureMerkleTrie does not have
         // bugs, then we know that this withdrawal was actually triggered on L2 and can therefore
         // be relayed on L1.
         require(
-//            verifyMerkleProof(
-//                withdrawalHash,
-//                _withdrawalProof,
-//                _tx.nonce,
-//                _withdrawRoot
-//            ) ||
-//                verifyMerkleProof(
-//                    withdrawalHash,
-//                    _withdrawalProof,
-//                    _tx.nonce,
-//                    _prewithdrawRoot
-//                ),
-             true,
+            verifyMerkleProof(
+                withdrawalHash,
+                _withdrawalProof,
+                _tx.nonce,
+                _withdrawalRoot
+            ),
+            // true,
             "OptimismPortal: invalid withdrawal inclusion proof"
         );
 

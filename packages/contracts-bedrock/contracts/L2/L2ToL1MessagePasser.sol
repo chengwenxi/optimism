@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { Types } from "../libraries/Types.sol";
-import { Hashing } from "../libraries/Hashing.sol";
-import { Encoding } from "../libraries/Encoding.sol";
-import { Burn } from "../libraries/Burn.sol";
-import { Semver } from "../universal/Semver.sol";
-import { Tree } from "../universal/Tree.sol";
+import {Types} from "../libraries/Types.sol";
+import {Hashing} from "../libraries/Hashing.sol";
+import {Encoding} from "../libraries/Encoding.sol";
+import {Burn} from "../libraries/Burn.sol";
+import {Semver} from "../universal/Semver.sol";
+import {Tree} from "../universal/Tree.sol";
 
 /**
  * @custom:proxied
- * @custom:predeploy 0x5300000000000000000000000000000000000001
+ * @custom:predeploy 0x5300000000000000000000000000000000000000
  * @title L2ToL1MessagePasser
  * @notice The L2ToL1MessagePasser is a dedicated contract where messages that are being sent from
  *         L2 to L1 can be stored. The storage root of this contract is pulled up to the top level
  *         of the L2 output to reduce the cost of proving the existence of sent messages.
  */
-contract L2ToL1MessagePasser is Semver,Tree {
+contract L2ToL1MessagePasser is Semver, Tree {
     /**
      * @notice The L1 gas limit set when eth is withdrawn using the receive() function.
      */
@@ -74,7 +74,9 @@ contract L2ToL1MessagePasser is Semver,Tree {
     /**
      * @custom:semver 1.0.0
      */
-    constructor() Semver(1, 0, 0) {}
+    constructor() Semver(1, 0, 0) {
+        messageRoot = getTreeRoot();
+    }
 
     /**
      * @notice Allows users to withdraw ETH by sending directly to this contract.
@@ -120,9 +122,6 @@ contract L2ToL1MessagePasser is Semver,Tree {
 
         _appendMessageHash(withdrawalHash);
         messageRoot = getTreeRoot();
-        unchecked {
-            msgNonce ++;
-        }
 
         emit MessagePassed(
             messageNonce(),
@@ -134,6 +133,9 @@ contract L2ToL1MessagePasser is Semver,Tree {
             withdrawalHash,
             messageRoot
         );
+        unchecked {
+            msgNonce++;
+        }
     }
 
     /**

@@ -68,7 +68,7 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
         address challenger,
         uint256 challengeDeposit
     );
-    event SubmitBatches(uint64 indexed numBatch);
+    event SubmitBatches(uint64 indexed numBatch, uint64 l2Num);
     event ChallengeRes(uint256 indexed batchIndex, address winner, string res);
 
     // todo submitter may change to validators
@@ -131,9 +131,10 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
 
             require(
                 batches[i].preStateRoot ==
-                storageBatchs[currentBatchSequenced].stateRoot,
+                    storageBatchs[currentBatchSequenced].stateRoot,
                 "Preview state root not equal"
             );
+
             uint256[] memory publicInput = _buildCommitment(
                 MAX_TXS,
                 MAX_CALLDATA,
@@ -150,12 +151,13 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
             bytes32 commitmentHash;
             assembly {
                 commitmentHash := keccak256(
-                add(publicInput, 32),
-                mul(mload(publicInput), 32)
+                    add(publicInput, 32),
+                    mul(mload(publicInput), 32)
                 )
             }
             withdrawRoots[batches[i].withdrawRoot] = block.timestamp;
             storageBatchs[currentBatchSequenced] = BatchStore(
+                batches[i].blockNumber,
                 batches[i].withdrawRoot,
                 commitmentHash,
                 stateRoot,
@@ -166,14 +168,14 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
         lastBatchSequenced = currentBatchSequenced;
         lastL2BlockNumber = batches[batchesNum - 1].blockNumber;
 
-        emit SubmitBatches(lastBatchSequenced);
+        emit SubmitBatches(lastBatchSequenced, lastL2BlockNumber);
     }
 
     function confirmBatch(uint64 batchIndex) public {
         require(!isBatchInChallenge(batchIndex));
         bool insideChallengeWindow = storageBatchs[batchIndex].originTimestamp +
-        FINALIZATION_PERIOD_SECONDS >
-        block.timestamp;
+            FINALIZATION_PERIOD_SECONDS >
+            block.timestamp;
         require(
             !insideChallengeWindow,
             "Cannot confirm batch inside the challenge window"
@@ -196,8 +198,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
         // check challenge window
         // todo get finalization period from output oracle
         bool insideChallengeWindow = storageBatchs[batchIndex].originTimestamp +
-        FINALIZATION_PERIOD_SECONDS >
-        block.timestamp;
+            FINALIZATION_PERIOD_SECONDS >
+            block.timestamp;
         require(
             insideChallengeWindow,
             "Cannot challenge batch outside the challenge window"
@@ -222,8 +224,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
         require(challenges[batchIndex].challenger != address(0));
         require(!challenges[batchIndex].finished, "Challenge already finished");
         bool insideChallengeWindow = challenges[batchIndex].startTime +
-        PROOF_WINDOW >
-        block.timestamp;
+            PROOF_WINDOW >
+            block.timestamp;
         if (!insideChallengeWindow) {
             _challengerWin(batchIndex, "timeout");
             // todo pause PORTAL contracts
@@ -266,8 +268,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
             if (msg.sender == submitter && lastBatchSequenced != 0) {
                 require(
                     storageBatchs[lastBatchSequenced].originTimestamp +
-                    FINALIZATION_PERIOD_SECONDS <=
-                    block.timestamp,
+                        FINALIZATION_PERIOD_SECONDS <=
+                        block.timestamp,
                     "submitter should wait batch to be confirm"
                 );
             }
@@ -301,8 +303,8 @@ contract ZKEVM is CircuitConfig, OwnableUpgradeable {
 
     function isBatchInChallenge(uint64 batchIndex) public view returns (bool) {
         return
-        challenges[batchIndex].challenger != address(0) &&
-        !challenges[batchIndex].finished;
+            challenges[batchIndex].challenger != address(0) &&
+            !challenges[batchIndex].finished;
     }
 
     function isUserInChallenge(address user) public view returns (bool) {
