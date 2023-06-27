@@ -233,9 +233,6 @@ func setupPredeploy(db vm.StateDB, deployResults immutables.DeploymentResults, s
 	if bytecode, ok := deployResults[name]; ok {
 		log.Info("Setting deployed bytecode with immutables", "name", name, "address", implAddr)
 		db.SetCode(implAddr, bytecode)
-		if name == "" {
-			fmt.Println("")
-		}
 	} else {
 		depBytecode, err := bindings.GetDeployedBytecode(name)
 		if err != nil {
