@@ -68,6 +68,8 @@ func MakeDeployParams(t require.TestingT, tp *TestParams) *DeployParams {
 		BatchInboxAddress:   common.Address{0: 0x42, 19: 0xff}, // tbd
 		BatchSenderAddress:  addresses.Batcher,
 
+		ZKEVMSubmitter: common.Address{}, // tbd
+
 		L2OutputOracleSubmissionInterval: 6,
 		L2OutputOracleStartingTimestamp:  -1,
 		L2OutputOracleProposer:           addresses.Proposer,
@@ -264,6 +266,7 @@ func ForkedDeployConfig(t require.TestingT, mnemonicCfg *MnemonicConfig, startBl
 		FinalSystemOwner:                 addrs.SysCfgOwner,
 		L1GenesisBlockDifficulty:         uint64ToBig(0),
 		L1GenesisBlockBaseFeePerGas:      uint64ToBig(0),
+		ZKEVMSubmitter:                   addrs.Proposer,
 		L2OutputOracleSubmissionInterval: 10,
 		L2OutputOracleStartingTimestamp:  int(startBlock.Time()),
 		L2OutputOracleProposer:           addrs.Proposer,

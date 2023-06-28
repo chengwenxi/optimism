@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
-import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import { SafeCall } from "../libraries/SafeCall.sol";
-import { L2OutputOracle } from "./L2OutputOracle.sol";
-import { SystemConfig } from "./SystemConfig.sol";
-import { Constants } from "../libraries/Constants.sol";
-import { Types } from "../libraries/Types.sol";
-import { Hashing } from "../libraries/Hashing.sol";
-import { SecureMerkleTrie } from "../libraries/trie/SecureMerkleTrie.sol";
-import { AddressAliasHelper } from "../vendor/AddressAliasHelper.sol";
-import { ResourceMetering } from "./ResourceMetering.sol";
-import { Semver } from "../universal/Semver.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {SafeCall} from "../libraries/SafeCall.sol";
+import {L2OutputOracle} from "./L2OutputOracle.sol";
+import {SystemConfig} from "./SystemConfig.sol";
+import {Constants} from "../libraries/Constants.sol";
+import {Types} from "../libraries/Types.sol";
+import {Hashing} from "../libraries/Hashing.sol";
+import {SecureMerkleTrie} from "../libraries/trie/SecureMerkleTrie.sol";
+import {AddressAliasHelper} from "../vendor/AddressAliasHelper.sol";
+import {ResourceMetering} from "./ResourceMetering.sol";
+import {Semver} from "../universal/Semver.sol";
+import {Verify} from "../universal/Tree.sol";
+import {ZKEVM} from "./ZKEVM.sol";
 
 /**
  * @custom:proxied
@@ -20,7 +22,7 @@ import { Semver } from "../universal/Semver.sol";
  *         and L2. Messages sent directly to the OptimismPortal have no form of replayability.
  *         Users are encouraged to use the L1CrossDomainMessenger for a higher-level interface.
  */
-contract OptimismPortal is Initializable, ResourceMetering, Semver {
+contract OptimismPortal is Initializable, ResourceMetering, Semver, Verify {
     /**
      * @notice Represents a proven withdrawal.
      *
@@ -81,6 +83,11 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
      *         withdrawals are paused. This may be removed in the future.
      */
     bool public paused;
+
+    /**
+     * @notice Address of the L2OutputOracle contract.
+     */
+    ZKEVM public immutable zkevm;
 
     /**
      * @notice Emitted when a transaction is deposited from L1 to L2. The parameters of this event
@@ -151,11 +158,13 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         L2OutputOracle _l2Oracle,
         address _guardian,
         bool _paused,
-        SystemConfig _config
+        SystemConfig _config,
+        ZKEVM _zkevm
     ) Semver(1, 6, 0) {
         L2_ORACLE = _l2Oracle;
         GUARDIAN = _guardian;
         SYSTEM_CONFIG = _config;
+        zkevm = _zkevm;
         initialize(_paused);
     }
 
@@ -172,7 +181,10 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
      * @notice Pause deposits and withdrawals.
      */
     function pause() external {
-        require(msg.sender == GUARDIAN, "OptimismPortal: only guardian can pause");
+        require(
+            msg.sender == GUARDIAN,
+            "OptimismPortal: only guardian can pause"
+        );
         paused = true;
         emit Paused(msg.sender);
     }
@@ -181,7 +193,10 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
      * @notice Unpause deposits and withdrawals.
      */
     function unpause() external {
-        require(msg.sender == GUARDIAN, "OptimismPortal: only guardian can unpause");
+        require(
+            msg.sender == GUARDIAN,
+            "OptimismPortal: only guardian can unpause"
+        );
         paused = false;
         emit Unpaused(msg.sender);
     }
@@ -205,7 +220,13 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
      */
     // solhint-disable-next-line ordering
     receive() external payable {
-        depositTransaction(msg.sender, msg.value, RECEIVE_DEFAULT_GAS_LIMIT, false, bytes(""));
+        depositTransaction(
+            msg.sender,
+            msg.value,
+            RECEIVE_DEFAULT_GAS_LIMIT,
+            false,
+            bytes("")
+        );
     }
 
     /**
@@ -243,7 +264,8 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         Types.WithdrawalTransaction memory _tx,
         uint256 _l2OutputIndex,
         Types.OutputRootProof calldata _outputRootProof,
-        bytes[] calldata _withdrawalProof
+        bytes32[32] calldata _withdrawalProof,
+        bytes32 _withdrawalRoot
     ) external whenNotPaused {
         // Prevent users from creating a deposit transaction where this address is the message
         // sender on L2. Because this is checked here, we do not need to check again in
@@ -265,7 +287,9 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
 
         // Load the ProvenWithdrawal into memory, using the withdrawal hash as a unique identifier.
         bytes32 withdrawalHash = Hashing.hashWithdrawal(_tx);
-        ProvenWithdrawal memory provenWithdrawal = provenWithdrawals[withdrawalHash];
+        ProvenWithdrawal memory provenWithdrawal = provenWithdrawals[
+            withdrawalHash
+        ];
 
         // We generally want to prevent users from proving the same withdrawal multiple times
         // because each successive proof will update the timestamp. A malicious user can take
@@ -275,7 +299,9 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         // output index has been updated.
         require(
             provenWithdrawal.timestamp == 0 ||
-                L2_ORACLE.getL2Output(provenWithdrawal.l2OutputIndex).outputRoot !=
+                L2_ORACLE
+                    .getL2Output(provenWithdrawal.l2OutputIndex)
+                    .outputRoot !=
                 provenWithdrawal.outputRoot,
             "OptimismPortal: withdrawal hash has already been proven"
         );
@@ -290,20 +316,26 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
             )
         );
 
+        // get withdrawRoot for withdraw proof verify
+        require(
+            zkevm.withdrawRoots(_withdrawalRoot) > 0,
+            "Did not submit withdrawRoot"
+        );
+
         // Verify that the hash of this withdrawal was stored in the L2toL1MessagePasser contract
         // on L2. If this is true, under the assumption that the SecureMerkleTrie does not have
         // bugs, then we know that this withdrawal was actually triggered on L2 and can therefore
         // be relayed on L1.
-        // todo: verify the smt proof
-//        require(
-//            SecureMerkleTrie.verifyInclusionProof(
-//                abi.encode(storageKey),
-//                hex"01",
-//                _withdrawalProof,
-//                _outputRootProof.messagePasserStorageRoot
-//            ),
-//            "OptimismPortal: invalid withdrawal inclusion proof"
-//        );
+        require(
+            verifyMerkleProof(
+                withdrawalHash,
+                _withdrawalProof,
+                _tx.nonce,
+                _withdrawalRoot
+            ),
+            // true,
+            "OptimismPortal: invalid withdrawal inclusion proof"
+        );
 
         // Designate the withdrawalHash as proven by storing the `outputRoot`, `timestamp`, and
         // `l2BlockNumber` in the `provenWithdrawals` mapping. A `withdrawalHash` can only be
@@ -323,10 +355,9 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
      *
      * @param _tx Withdrawal transaction to finalize.
      */
-    function finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx)
-        external
-        whenNotPaused
-    {
+    function finalizeWithdrawalTransaction(
+        Types.WithdrawalTransaction memory _tx
+    ) external whenNotPaused {
         // Make sure that the l2Sender has not yet been set. The l2Sender is set to a value other
         // than the default value when a withdrawal transaction is being finalized. This check is
         // a defacto reentrancy guard.
@@ -337,7 +368,9 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
 
         // Grab the proven withdrawal from the `provenWithdrawals` map.
         bytes32 withdrawalHash = Hashing.hashWithdrawal(_tx);
-        ProvenWithdrawal memory provenWithdrawal = provenWithdrawals[withdrawalHash];
+        ProvenWithdrawal memory provenWithdrawal = provenWithdrawals[
+            withdrawalHash
+        ];
 
         // A withdrawal can only be finalized if it has been proven. We know that a withdrawal has
         // been proven at least once when its timestamp is non-zero. Unproven withdrawals will have
@@ -403,7 +436,12 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
         //   2. The amount of gas provided to the execution context of the target is at least the
         //      gas limit specified by the user. If there is not enough gas in the current context
         //      to accomplish this, `callWithMinGas` will revert.
-        bool success = SafeCall.callWithMinGas(_tx.target, _tx.gasLimit, _tx.value, _tx.data);
+        bool success = SafeCall.callWithMinGas(
+            _tx.target,
+            _tx.gasLimit,
+            _tx.value,
+            _tx.data
+        );
 
         // Reset the l2Sender back to the default value.
         l2Sender = Constants.DEFAULT_L2_SENDER;
@@ -491,8 +529,13 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
      *
      * @return Whether or not the output is finalized.
      */
-    function isOutputFinalized(uint256 _l2OutputIndex) external view returns (bool) {
-        return _isFinalizationPeriodElapsed(L2_ORACLE.getL2Output(_l2OutputIndex).timestamp);
+    function isOutputFinalized(
+        uint256 _l2OutputIndex
+    ) external view returns (bool) {
+        return
+            _isFinalizationPeriodElapsed(
+                L2_ORACLE.getL2Output(_l2OutputIndex).timestamp
+            );
     }
 
     /**
@@ -502,7 +545,11 @@ contract OptimismPortal is Initializable, ResourceMetering, Semver {
      *
      * @return Whether or not the finalization period has elapsed.
      */
-    function _isFinalizationPeriodElapsed(uint256 _timestamp) internal view returns (bool) {
-        return block.timestamp > _timestamp + L2_ORACLE.FINALIZATION_PERIOD_SECONDS();
+    function _isFinalizationPeriodElapsed(
+        uint256 _timestamp
+    ) internal view returns (bool) {
+        return
+            block.timestamp >
+            _timestamp + L2_ORACLE.FINALIZATION_PERIOD_SECONDS();
     }
 }

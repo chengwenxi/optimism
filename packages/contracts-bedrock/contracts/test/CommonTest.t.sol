@@ -2,36 +2,36 @@
 pragma solidity 0.8.15;
 
 /* Testing utilities */
-import { Test, StdUtils } from "forge-std/Test.sol";
-import { L2OutputOracle } from "../L1/L2OutputOracle.sol";
-import { L2ToL1MessagePasser } from "../L2/L2ToL1MessagePasser.sol";
-import { L1StandardBridge } from "../L1/L1StandardBridge.sol";
-import { L2StandardBridge } from "../L2/L2StandardBridge.sol";
-import { L1ERC721Bridge } from "../L1/L1ERC721Bridge.sol";
-import { L2ERC721Bridge } from "../L2/L2ERC721Bridge.sol";
-import { OptimismMintableERC20Factory } from "../universal/OptimismMintableERC20Factory.sol";
-import { OptimismMintableERC721Factory } from "../universal/OptimismMintableERC721Factory.sol";
-import { OptimismMintableERC20 } from "../universal/OptimismMintableERC20.sol";
-import { OptimismPortal } from "../L1/OptimismPortal.sol";
-import { L1CrossDomainMessenger } from "../L1/L1CrossDomainMessenger.sol";
-import { L2CrossDomainMessenger } from "../L2/L2CrossDomainMessenger.sol";
-import { AddressAliasHelper } from "../vendor/AddressAliasHelper.sol";
-import { LegacyERC20ETH } from "../legacy/LegacyERC20ETH.sol";
-import { Predeploys } from "../libraries/Predeploys.sol";
-import { Types } from "../libraries/Types.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { Proxy } from "../universal/Proxy.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { ResolvedDelegateProxy } from "../legacy/ResolvedDelegateProxy.sol";
-import { AddressManager } from "../legacy/AddressManager.sol";
-import { L1ChugSplashProxy } from "../legacy/L1ChugSplashProxy.sol";
-import { IL1ChugSplashDeployer } from "../legacy/L1ChugSplashProxy.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
-import { LegacyMintableERC20 } from "../legacy/LegacyMintableERC20.sol";
-import { SystemConfig } from "../L1/SystemConfig.sol";
-import { ResourceMetering } from "../L1/ResourceMetering.sol";
-import { Constants } from "../libraries/Constants.sol";
-import { ZKEVM } from "../L1/ZKEVM.sol";
+import {Test, StdUtils} from "forge-std/Test.sol";
+import {L2OutputOracle} from "../L1/L2OutputOracle.sol";
+import {L2ToL1MessagePasser} from "../L2/L2ToL1MessagePasser.sol";
+import {L1StandardBridge} from "../L1/L1StandardBridge.sol";
+import {L2StandardBridge} from "../L2/L2StandardBridge.sol";
+import {L1ERC721Bridge} from "../L1/L1ERC721Bridge.sol";
+import {L2ERC721Bridge} from "../L2/L2ERC721Bridge.sol";
+import {OptimismMintableERC20Factory} from "../universal/OptimismMintableERC20Factory.sol";
+import {OptimismMintableERC721Factory} from "../universal/OptimismMintableERC721Factory.sol";
+import {OptimismMintableERC20} from "../universal/OptimismMintableERC20.sol";
+import {OptimismPortal} from "../L1/OptimismPortal.sol";
+import {L1CrossDomainMessenger} from "../L1/L1CrossDomainMessenger.sol";
+import {L2CrossDomainMessenger} from "../L2/L2CrossDomainMessenger.sol";
+import {AddressAliasHelper} from "../vendor/AddressAliasHelper.sol";
+import {LegacyERC20ETH} from "../legacy/LegacyERC20ETH.sol";
+import {Predeploys} from "../libraries/Predeploys.sol";
+import {Types} from "../libraries/Types.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Proxy} from "../universal/Proxy.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {ResolvedDelegateProxy} from "../legacy/ResolvedDelegateProxy.sol";
+import {AddressManager} from "../legacy/AddressManager.sol";
+import {L1ChugSplashProxy} from "../legacy/L1ChugSplashProxy.sol";
+import {IL1ChugSplashDeployer} from "../legacy/L1ChugSplashProxy.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {LegacyMintableERC20} from "../legacy/LegacyMintableERC20.sol";
+import {SystemConfig} from "../L1/SystemConfig.sol";
+import {ResourceMetering} from "../L1/ResourceMetering.sol";
+import {Constants} from "../libraries/Constants.sol";
+import {ZKEVM} from "../L1/ZKEVM.sol";
 
 contract CommonTest is Test {
     address alice = address(128);
@@ -44,7 +44,8 @@ contract CommonTest is Test {
     uint256 immutable ZERO_VALUE = 0;
     uint64 immutable NON_ZERO_GASLIMIT = 50000;
     bytes32 nonZeroHash = keccak256(abi.encode("NON_ZERO"));
-    bytes NON_ZERO_DATA = hex"0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000";
+    bytes NON_ZERO_DATA =
+        hex"0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000";
 
     event TransactionDeposited(
         address indexed from,
@@ -116,7 +117,10 @@ contract L2OutputOracle_Initializer is CommonTest {
         uint256 l1Timestamp
     );
 
-    event OutputsDeleted(uint256 indexed prevNextOutputIndex, uint256 indexed newNextOutputIndex);
+    event OutputsDeleted(
+        uint256 indexed prevNextOutputIndex,
+        uint256 indexed newNextOutputIndex
+    );
 
     // Advance the evm's time to meet the L2OutputOracle's requirements for proposeL2Output
     function warpToProposeTime(uint256 _nextBlockNumber) public {
@@ -146,23 +150,60 @@ contract L2OutputOracle_Initializer is CommonTest {
         vm.prank(multisig);
         proxy.upgradeToAndCall(
             address(oracleImpl),
-            abi.encodeCall(L2OutputOracle.initialize, (startingBlockNumber, startingTimestamp))
+            abi.encodeCall(
+                L2OutputOracle.initialize,
+                (startingBlockNumber, startingTimestamp)
+            )
         );
         oracle = L2OutputOracle(address(proxy));
         vm.label(address(oracle), "L2OutputOracle");
 
         // Set the L2ToL1MessagePasser at the correct address
-        vm.etch(Predeploys.L2_TO_L1_MESSAGE_PASSER, address(new L2ToL1MessagePasser()).code);
+        vm.etch(
+            Predeploys.L2_TO_L1_MESSAGE_PASSER,
+            address(new L2ToL1MessagePasser()).code
+        );
 
         vm.label(Predeploys.L2_TO_L1_MESSAGE_PASSER, "L2ToL1MessagePasser");
     }
 }
 
-contract Portal_Initializer is L2OutputOracle_Initializer {
+contract ZKEVM_Initializer is L2OutputOracle_Initializer {
+    ZKEVM internal zkevmImpl;
+    ZKEVM internal zkevm;
+
+    event ChallengeState(
+        uint256 indexed batchIndex,
+        address challenger,
+        uint256 challengeDeposit
+    );
+    event SubmitBatches(uint64 indexed numBatch);
+    event ChallengeRes(uint256 indexed batchIndex, address winner, string res);
+
+    function setUp() public virtual override {
+        super.setUp();
+        vm.prank(multisig);
+        // Deploy zkevm impl
+        zkevmImpl = new ZKEVM(alice, bob);
+
+        Proxy proxy = new Proxy(multisig);
+        vm.prank(multisig);
+        proxy.upgradeToAndCall(
+            address(zkevmImpl),
+            abi.encodeWithSelector(ZKEVM.initialize.selector, alice, bob)
+        );
+
+        zkevm = ZKEVM(payable(address(proxy)));
+        vm.label(address(zkevm), "ZKEVM");
+    }
+}
+
+contract Portal_Initializer is ZKEVM_Initializer {
     // Test target
     OptimismPortal internal opImpl;
     OptimismPortal internal op;
     SystemConfig systemConfig;
+    uint256 internal constant _TREE_DEPTH = 32;
 
     event WithdrawalFinalized(bytes32 indexed withdrawalHash, bool success);
     event WithdrawalProven(
@@ -174,7 +215,8 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
     function setUp() public virtual override {
         super.setUp();
 
-        ResourceMetering.ResourceConfig memory config = Constants.DEFAULT_RESOURCE_CONFIG();
+        ResourceMetering.ResourceConfig memory config = Constants
+            .DEFAULT_RESOURCE_CONFIG();
 
         systemConfig = new SystemConfig({
             _owner: address(1),
@@ -190,7 +232,8 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
             _l2Oracle: oracle,
             _guardian: guardian,
             _paused: true,
-            _config: systemConfig
+            _config: systemConfig,
+            _zkevm: zkevm
         });
 
         Proxy proxy = new Proxy(multisig);
@@ -201,35 +244,6 @@ contract Portal_Initializer is L2OutputOracle_Initializer {
         );
         op = OptimismPortal(payable(address(proxy)));
         vm.label(address(op), "OptimismPortal");
-    }
-}
-
-contract ZKEVM_Initializer is Portal_Initializer {
-    AddressManager internal addressManager;
-    ZKEVM internal zkevmImpl;
-    ZKEVM internal zkevm;
-
-    event ChallengeState(uint256 indexed batchIndex, address challenger, uint256 challengeDeposit);
-    event SubmitBatches(uint64 indexed numBatch);
-    event ChallengeRes(uint256 indexed batchIndex, address winner, string res);
-
-    function setUp() public virtual override {
-        super.setUp();
-        // Deploy the address manager
-        vm.prank(multisig);
-        addressManager = new AddressManager();
-        // Deploy zkevm impl
-        zkevmImpl = new ZKEVM(op, alice, bob);
-
-        Proxy proxy = new Proxy(multisig);
-        vm.prank(multisig);
-        proxy.upgradeToAndCall(
-            address(zkevmImpl),
-            abi.encodeWithSelector(ZKEVM.initialize.selector, op, alice, bob)
-        );
-
-        zkevm = ZKEVM(payable(address(proxy)));
-        vm.label(address(zkevm), "ZKEVM");
     }
 }
 
@@ -286,7 +300,10 @@ contract Messenger_Initializer is Portal_Initializer {
 
         // Setup the address manager and proxy
         vm.prank(multisig);
-        addressManager.setAddress("OVM_L1CrossDomainMessenger", address(L1MessengerImpl));
+        addressManager.setAddress(
+            "OVM_L1CrossDomainMessenger",
+            address(L1MessengerImpl)
+        );
         ResolvedDelegateProxy proxy = new ResolvedDelegateProxy(
             addressManager,
             "OVM_L1CrossDomainMessenger"
@@ -306,7 +323,10 @@ contract Messenger_Initializer is Portal_Initializer {
         vm.label(address(L1MessengerImpl), "L1CrossDomainMessenger_Impl");
         vm.label(address(L1Messenger), "L1CrossDomainMessenger_Proxy");
         vm.label(Predeploys.LEGACY_ERC20_ETH, "LegacyERC20ETH");
-        vm.label(Predeploys.L2_CROSS_DOMAIN_MESSENGER, "L2CrossDomainMessenger");
+        vm.label(
+            Predeploys.L2_CROSS_DOMAIN_MESSENGER,
+            "L2CrossDomainMessenger"
+        );
 
         vm.label(
             AddressAliasHelper.applyL1ToL2Alias(address(L1Messenger)),
@@ -328,7 +348,12 @@ contract Bridge_Initializer is Messenger_Initializer {
     ERC20 BadL2Token;
     OptimismMintableERC20 RemoteL1Token;
 
-    event ETHDepositInitiated(address indexed from, address indexed to, uint256 amount, bytes data);
+    event ETHDepositInitiated(
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        bytes data
+    );
 
     event ETHWithdrawalFinalized(
         address indexed from,
@@ -382,9 +407,19 @@ contract Bridge_Initializer is Messenger_Initializer {
         bytes data
     );
 
-    event ETHBridgeInitiated(address indexed from, address indexed to, uint256 amount, bytes data);
+    event ETHBridgeInitiated(
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        bytes data
+    );
 
-    event ETHBridgeFinalized(address indexed from, address indexed to, uint256 amount, bytes data);
+    event ETHBridgeFinalized(
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        bytes data
+    );
 
     event ERC20BridgeInitiated(
         address indexed localToken,
@@ -408,7 +443,10 @@ contract Bridge_Initializer is Messenger_Initializer {
         super.setUp();
 
         vm.label(Predeploys.L2_STANDARD_BRIDGE, "L2StandardBridge");
-        vm.label(Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY, "OptimismMintableERC20Factory");
+        vm.label(
+            Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY,
+            "OptimismMintableERC20Factory"
+        );
 
         // Deploy the L1 bridge and initialize it with the address of the
         // L1CrossDomainMessenger
@@ -419,7 +457,9 @@ contract Bridge_Initializer is Messenger_Initializer {
             abi.encode(true)
         );
         vm.startPrank(multisig);
-        proxy.setCode(address(new L1StandardBridge(payable(address(L1Messenger)))).code);
+        proxy.setCode(
+            address(new L1StandardBridge(payable(address(L1Messenger)))).code
+        );
         vm.clearMockedCalls();
         address L1Bridge_Impl = proxy.getImplementation();
         vm.stopPrank();
@@ -439,10 +479,18 @@ contract Bridge_Initializer is Messenger_Initializer {
         OptimismMintableERC20Factory factory = new OptimismMintableERC20Factory(
             Predeploys.L2_STANDARD_BRIDGE
         );
-        vm.etch(Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY, address(factory).code);
-        L2TokenFactory = OptimismMintableERC20Factory(Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY);
+        vm.etch(
+            Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY,
+            address(factory).code
+        );
+        L2TokenFactory = OptimismMintableERC20Factory(
+            Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY
+        );
 
-        vm.etch(Predeploys.LEGACY_ERC20_ETH, address(new LegacyERC20ETH()).code);
+        vm.etch(
+            Predeploys.LEGACY_ERC20_ETH,
+            address(new LegacyERC20ETH()).code
+        );
 
         L1Token = new ERC20("Native L1 Token", "L1T");
 
@@ -500,13 +548,20 @@ contract ERC721Bridge_Initializer is Messenger_Initializer {
         super.setUp();
 
         // Deploy the L1ERC721Bridge.
-        L1Bridge = new L1ERC721Bridge(address(L1Messenger), Predeploys.L2_ERC721_BRIDGE);
+        L1Bridge = new L1ERC721Bridge(
+            address(L1Messenger),
+            Predeploys.L2_ERC721_BRIDGE
+        );
 
         // Deploy the implementation for the L2ERC721Bridge and etch it into the predeploy address.
         vm.etch(
             Predeploys.L2_ERC721_BRIDGE,
-            address(new L2ERC721Bridge(Predeploys.L2_CROSS_DOMAIN_MESSENGER, address(L1Bridge)))
-                .code
+            address(
+                new L2ERC721Bridge(
+                    Predeploys.L2_CROSS_DOMAIN_MESSENGER,
+                    address(L1Bridge)
+                )
+            ).code
         );
 
         // Set up a reference to the L2ERC721Bridge.
@@ -519,15 +574,11 @@ contract ERC721Bridge_Initializer is Messenger_Initializer {
 }
 
 contract FFIInterface is Test {
-    function getProveWithdrawalTransactionInputs(Types.WithdrawalTransaction memory _tx)
+    function getProveWithdrawalTransactionInputs(
+        Types.WithdrawalTransaction memory _tx
+    )
         external
-        returns (
-            bytes32,
-            bytes32,
-            bytes32,
-            bytes32,
-            bytes[] memory
-        )
+        returns (bytes32, bytes32, bytes32, bytes32, bytes32[32] memory)
     {
         string[] memory cmds = new string[](8);
         cmds[0] = "scripts/differential-testing/differential-testing";
@@ -545,10 +596,19 @@ contract FFIInterface is Test {
             bytes32 storageRoot,
             bytes32 outputRoot,
             bytes32 withdrawalHash,
-            bytes[] memory withdrawalProof
-        ) = abi.decode(result, (bytes32, bytes32, bytes32, bytes32, bytes[]));
+            bytes32[32] memory withdrawalProof
+        ) = abi.decode(
+                result,
+                (bytes32, bytes32, bytes32, bytes32, bytes32[32])
+            );
 
-        return (stateRoot, storageRoot, outputRoot, withdrawalHash, withdrawalProof);
+        return (
+            stateRoot,
+            storageRoot,
+            outputRoot,
+            withdrawalHash,
+            withdrawalProof
+        );
     }
 
     function hashCrossDomainMessage(
@@ -625,7 +685,9 @@ contract FFIInterface is Test {
         string[] memory cmds = new string[](10);
         cmds[0] = "scripts/differential-testing/differential-testing";
         cmds[1] = "hashDepositTransaction";
-        cmds[2] = "0x0000000000000000000000000000000000000000000000000000000000000000";
+        cmds[
+            2
+        ] = "0x0000000000000000000000000000000000000000000000000000000000000000";
         cmds[3] = vm.toString(_logIndex);
         cmds[4] = vm.toString(_from);
         cmds[5] = vm.toString(_to);
@@ -638,10 +700,9 @@ contract FFIInterface is Test {
         return abi.decode(result, (bytes32));
     }
 
-    function encodeDepositTransaction(Types.UserDepositTransaction calldata txn)
-        external
-        returns (bytes memory)
-    {
+    function encodeDepositTransaction(
+        Types.UserDepositTransaction calldata txn
+    ) external returns (bytes memory) {
         string[] memory cmds = new string[](11);
         cmds[0] = "scripts/differential-testing/differential-testing";
         cmds[1] = "encodeDepositTransaction";
@@ -681,7 +742,9 @@ contract FFIInterface is Test {
         return abi.decode(result, (bytes));
     }
 
-    function decodeVersionedNonce(uint256 nonce) external returns (uint256, uint256) {
+    function decodeVersionedNonce(
+        uint256 nonce
+    ) external returns (uint256, uint256) {
         string[] memory cmds = new string[](3);
         cmds[0] = "scripts/differential-testing/differential-testing";
         cmds[1] = "decodeVersionedNonce";
@@ -691,15 +754,9 @@ contract FFIInterface is Test {
         return abi.decode(result, (uint256, uint256));
     }
 
-    function getMerkleTrieFuzzCase(string memory variant)
-        external
-        returns (
-            bytes32,
-            bytes memory,
-            bytes memory,
-            bytes[] memory
-        )
-    {
+    function getMerkleTrieFuzzCase(
+        string memory variant
+    ) external returns (bytes32, bytes memory, bytes memory, bytes[] memory) {
         string[] memory cmds = new string[](5);
         cmds[0] = "./test-case-generator/fuzz";
         cmds[1] = "-m";
@@ -767,7 +824,9 @@ contract ConfigurableCaller {
         if (doRevert) {
             revert("ConfigurableCaller: revert");
         } else {
-            (bool success, bytes memory returndata) = address(target).call(payload);
+            (bool success, bytes memory returndata) = address(target).call(
+                payload
+            );
             emit WhatHappened(success, returndata);
             assembly {
                 switch success

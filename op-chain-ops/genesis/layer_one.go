@@ -201,7 +201,7 @@ func BuildL1DeveloperGenesis(config *DeployConfig) (*core.Genesis, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err = zkevmABI.Pack("initialize", predeploys.DevOptimismPortalAddr, config.L2OutputOracleProposer)
+	data, err = zkevmABI.Pack("initialize", config.ZKEVMSubmitter, config.L2OutputOracleChallenger)
 	if err != nil {
 		return nil, fmt.Errorf("cannot abi encode initialize for L1CrossDomainMessenger: %w", err)
 	}
@@ -350,6 +350,7 @@ func deployL1Contracts(config *DeployConfig, backend *backends.SimulatedBackend)
 				config.PortalGuardian,
 				true, // _paused
 				predeploys.DevSystemConfigAddr,
+				predeploys.DevZKEVMAddr,
 			},
 		},
 		{
@@ -420,6 +421,7 @@ func l1Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 			deployment.Args[1].(common.Address),
 			deployment.Args[2].(bool),
 			deployment.Args[3].(common.Address),
+			deployment.Args[4].(common.Address),
 		)
 	case "L1CrossDomainMessenger":
 		_, tx, _, err = bindings.DeployL1CrossDomainMessenger(
@@ -448,6 +450,8 @@ func l1Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		_, tx, _, err = bindings.DeployZKEVM(
 			opts,
 			backend,
+			common.Address{},
+			common.Address{},
 		)
 	case "ProxyAdmin":
 		_, tx, _, err = bindings.DeployProxyAdmin(

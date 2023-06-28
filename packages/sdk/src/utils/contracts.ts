@@ -111,6 +111,7 @@ export const getAllOEContracts = (
       BondManager: undefined,
       OptimismPortal: undefined,
       L2OutputOracle: undefined,
+      ZKEVM: undefined,
     },
     l2: DEFAULT_L2_CONTRACT_ADDRESSES,
   }

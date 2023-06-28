@@ -1,18 +1,20 @@
 pragma solidity 0.8.15;
 
-import { OptimismPortal } from "../L1/OptimismPortal.sol";
-import { L2OutputOracle } from "../L1/L2OutputOracle.sol";
-import { AddressAliasHelper } from "../vendor/AddressAliasHelper.sol";
-import { SystemConfig } from "../L1/SystemConfig.sol";
-import { ResourceMetering } from "../L1/ResourceMetering.sol";
-import { Constants } from "../libraries/Constants.sol";
+import {OptimismPortal} from "../L1/OptimismPortal.sol";
+import {L2OutputOracle} from "../L1/L2OutputOracle.sol";
+import {AddressAliasHelper} from "../vendor/AddressAliasHelper.sol";
+import {SystemConfig} from "../L1/SystemConfig.sol";
+import {ResourceMetering} from "../L1/ResourceMetering.sol";
+import {Constants} from "../libraries/Constants.sol";
+import {ZKEVM} from "../L1/ZKEVM.sol";
 
 contract EchidnaFuzzOptimismPortal {
     OptimismPortal internal portal;
     bool internal failedToComplete;
 
     constructor() {
-        ResourceMetering.ResourceConfig memory rcfg = Constants.DEFAULT_RESOURCE_CONFIG();
+        ResourceMetering.ResourceConfig memory rcfg = Constants
+            .DEFAULT_RESOURCE_CONFIG();
 
         SystemConfig systemConfig = new SystemConfig({
             _owner: address(1),
@@ -28,7 +30,8 @@ contract EchidnaFuzzOptimismPortal {
             _l2Oracle: L2OutputOracle(address(0)),
             _guardian: address(0),
             _paused: false,
-            _config: systemConfig
+            _config: systemConfig,
+            _zkevm: ZKEVM(address(0))
         });
     }
 
@@ -42,8 +45,17 @@ contract EchidnaFuzzOptimismPortal {
         bytes memory _data
     ) public payable {
         failedToComplete = true;
-        require(!_isCreation || _to == address(0), "EchidnaFuzzOptimismPortal: invalid test case.");
-        portal.depositTransaction{ value: _mint }(_to, _value, _gasLimit, _isCreation, _data);
+        require(
+            !_isCreation || _to == address(0),
+            "EchidnaFuzzOptimismPortal: invalid test case."
+        );
+        portal.depositTransaction{value: _mint}(
+            _to,
+            _value,
+            _gasLimit,
+            _isCreation,
+            _data
+        );
         failedToComplete = false;
     }
 

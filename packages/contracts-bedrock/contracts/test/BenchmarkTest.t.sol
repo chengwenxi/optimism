@@ -2,19 +2,19 @@
 pragma solidity 0.8.15;
 
 /* Testing utilities */
-import { Test } from "forge-std/Test.sol";
-import { Vm } from "forge-std/Vm.sol";
+import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import "./CommonTest.t.sol";
-import { CrossDomainMessenger } from "../universal/CrossDomainMessenger.sol";
-import { ResourceMetering } from "../L1/ResourceMetering.sol";
+import {CrossDomainMessenger} from "../universal/CrossDomainMessenger.sol";
+import {ResourceMetering} from "../L1/ResourceMetering.sol";
 
 // Free function for setting the prevBaseFee param in the OptimismPortal.
-function setPrevBaseFee(
-    Vm _vm,
-    address _op,
-    uint128 _prevBaseFee
-) {
-    _vm.store(address(_op), bytes32(uint256(1)), bytes32((block.number << 192) | _prevBaseFee));
+function setPrevBaseFee(Vm _vm, address _op, uint128 _prevBaseFee) {
+    _vm.store(
+        address(_op),
+        bytes32(uint256(1)),
+        bytes32((block.number << 192) | _prevBaseFee)
+    );
 }
 
 contract SetPrevBaseFee_Test is Portal_Initializer {
@@ -37,7 +37,7 @@ contract GasBenchMark_OptimismPortal is Portal_Initializer {
 
     uint256 _proposedOutputIndex;
     uint256 _proposedBlockNumber;
-    bytes[] _withdrawalProof;
+    bytes32[_TREE_DEPTH] _withdrawalProof;
     Types.OutputRootProof internal _outputRootProof;
     bytes32 _outputRoot;
 
@@ -89,7 +89,7 @@ contract GasBenchMark_OptimismPortal is Portal_Initializer {
     }
 
     function test_depositTransaction_benchmark() external {
-        op.depositTransaction{ value: NON_ZERO_VALUE }(
+        op.depositTransaction{value: NON_ZERO_VALUE}(
             NON_ZERO_ADDRESS,
             ZERO_VALUE,
             NON_ZERO_GASLIMIT,
@@ -100,7 +100,7 @@ contract GasBenchMark_OptimismPortal is Portal_Initializer {
 
     function test_depositTransaction_benchmark_1() external {
         setPrevBaseFee(vm, address(op), 1 gwei);
-        op.depositTransaction{ value: NON_ZERO_VALUE }(
+        op.depositTransaction{value: NON_ZERO_VALUE}(
             NON_ZERO_ADDRESS,
             ZERO_VALUE,
             NON_ZERO_GASLIMIT,
@@ -153,14 +153,14 @@ contract GasBenchMark_L1StandardBridge_Deposit is Bridge_Initializer {
         vm.pauseGasMetering();
         setPrevBaseFee(vm, address(op), 1 gwei);
         vm.resumeGasMetering();
-        L1Bridge.depositETH{ value: 500 }(50000, hex"");
+        L1Bridge.depositETH{value: 500}(50000, hex"");
     }
 
     function test_depositETH_benchmark_1() external {
         vm.pauseGasMetering();
         setPrevBaseFee(vm, address(op), 10 gwei);
         vm.resumeGasMetering();
-        L1Bridge.depositETH{ value: 500 }(50000, hex"");
+        L1Bridge.depositETH{value: 500}(50000, hex"");
     }
 
     function test_depositERC20_benchmark_0() external {
@@ -196,7 +196,9 @@ contract GasBenchMark_L1StandardBridge_Finalize is Bridge_Initializer {
         deal(address(L1Token), address(L1Bridge), 100, true);
         vm.mockCall(
             address(L1Bridge.messenger()),
-            abi.encodeWithSelector(CrossDomainMessenger.xDomainMessageSender.selector),
+            abi.encodeWithSelector(
+                CrossDomainMessenger.xDomainMessageSender.selector
+            ),
             abi.encode(address(L1Bridge.OTHER_BRIDGE()))
         );
         vm.startPrank(address(L1Bridge.messenger()));
@@ -207,7 +209,7 @@ contract GasBenchMark_L1StandardBridge_Finalize is Bridge_Initializer {
         // TODO: Make this more accurate. It is underestimating the cost because it pranks
         // the call coming from the messenger, which bypasses the portal
         // and oracle.
-        L1Bridge.finalizeETHWithdrawal{ value: 100 }(alice, alice, 100, hex"");
+        L1Bridge.finalizeETHWithdrawal{value: 100}(alice, alice, 100, hex"");
     }
 }
 

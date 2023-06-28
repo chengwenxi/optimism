@@ -67,7 +67,7 @@ func FundDevAccounts(db vm.StateDB) {
 // can be set in state and the ProxyAdmin can be set as the admin of the
 // Proxy.
 func SetL2Proxies(db vm.StateDB) error {
-	err := setProxies(db, predeploys.ProxyAdminAddr, bigL2PredeployNamespace_53, 8)
+	err := setProxies(db, predeploys.ProxyAdminAddr, bigL2PredeployNamespace_53, 16)
 	if err != nil {
 		return err
 	}

@@ -45,6 +45,7 @@ export interface OEL1Contracts {
   // Bedrock
   OptimismPortal: Contract
   L2OutputOracle: Contract
+  ZKEVM: Contract
 }
 
 /**

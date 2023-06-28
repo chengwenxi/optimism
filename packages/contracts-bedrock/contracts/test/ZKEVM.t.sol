@@ -11,7 +11,7 @@ contract ZKEVMTest is ZKEVM_Initializer {
         assertEq(alice, zkevm.submitter());
         vm.deal(alice, 5 * MIN_DEPOSIT);
         vm.startPrank(alice);
-        zkevm.stake{value:MIN_DEPOSIT}();
+        zkevm.stake{value: MIN_DEPOSIT}();
         assertEq(MIN_DEPOSIT, zkevm.deposits(alice));
 
         zkevm.withdraw(MIN_DEPOSIT);
@@ -24,19 +24,25 @@ contract ZKEVMTest is ZKEVM_Initializer {
         vm.deal(bob, 5 * MIN_DEPOSIT);
         vm.startPrank(bob);
         vm.expectRevert("Caller not submitter");
-        zkevm.stake{value:MIN_DEPOSIT}();
+        zkevm.stake{value: MIN_DEPOSIT}();
     }
 
     function test_roullUp_revertSubmitterDeposit() external {
         // batch init
         ZKEVM.BatchData[] memory batches = new ZKEVM.BatchData[](1);
+        ZKEVM.BatchSignature memory sig = ZKEVM.BatchSignature({
+            signers: new bytes[](1), 
+            signature: bytes("0") 
+        });
+
         batches[0] = ZKEVM.BatchData(
-                bytes("0"),
-                bytes32(0),
-                0,
-                bytes("0"),
-                bytes32(0)
-            );
+            0, // uint64 blockNum
+            bytes("0"), // bytes transactions
+            bytes("0"), // bytes blockWitness
+            bytes32(0), // bytes32 preStateRoot
+            bytes32(0), // bytes32 withdrawRoot
+            sig
+        );
 
         assertEq(alice, zkevm.submitter());
         // bob submit batch: revert with Caller not submitter
@@ -56,16 +62,22 @@ contract ZKEVMTest is ZKEVM_Initializer {
     function test_challenge_revert() external {
         // alice submit batch 0
         ZKEVM.BatchData[] memory batches = new ZKEVM.BatchData[](1);
+        ZKEVM.BatchSignature memory sig = ZKEVM.BatchSignature({
+            signers: new bytes[](1),
+            signature: bytes("0")
+        });
+
         batches[0] = ZKEVM.BatchData(
-                bytes("0"),
-                bytes32(0),
-                0,
-                bytes("0"),
-                bytes32(0)
-            );
+            0, // uint64 blockNum
+            bytes("0"), // bytes transactions
+            bytes("0"), // bytes blockWitness
+            bytes32(0), // bytes32 preStateRoot
+            bytes32(0), // bytes32 withdrawRoot
+            sig
+        );
         vm.deal(alice, 5 * MIN_DEPOSIT);
         vm.startPrank(alice);
-        zkevm.stake{value:MIN_DEPOSIT}();
+        zkevm.stake{value: MIN_DEPOSIT}();
         zkevm.submitBatches(batches);
         vm.stopPrank();
 
@@ -73,19 +85,19 @@ contract ZKEVMTest is ZKEVM_Initializer {
         vm.prank(bob);
         vm.deal(bob, 5 * MIN_DEPOSIT);
         vm.expectRevert("Batch not exist");
-        zkevm.challengeState{value:MIN_DEPOSIT}(1);
+        zkevm.challengeState{value: MIN_DEPOSIT}(1);
         // chloe challenge batch 0 : revert with Caller not challenger
         address chloe = address(1024);
         vm.deal(chloe, 5 * MIN_DEPOSIT);
         vm.expectRevert("Caller not challenger");
         vm.prank(chloe);
-        zkevm.challengeState{value:MIN_DEPOSIT}(1);
+        zkevm.challengeState{value: MIN_DEPOSIT}(1);
         // bob challenge btach 0 twice: revert with Already has challenge
         vm.prank(bob);
-        zkevm.challengeState{value:MIN_DEPOSIT}(0);
+        zkevm.challengeState{value: MIN_DEPOSIT}(0);
         vm.expectRevert("Already has challenge");
         vm.prank(bob);
-        zkevm.challengeState{value:MIN_DEPOSIT}(0);
+        zkevm.challengeState{value: MIN_DEPOSIT}(0);
 
         // withdraw: User is in challenge
         vm.prank(alice);
@@ -103,11 +115,11 @@ contract ZKEVMTest is ZKEVM_Initializer {
             uint256 startTime_,
             bool finished_
         ) = zkevm.challenges(0);
-        vm.warp(startTime_+PROOF_WINDOW*2);
+        vm.warp(startTime_ + PROOF_WINDOW * 2);
         vm.expectEmit(true, true, true, true);
         emit ChallengeRes(0, bob, "timeout");
         vm.prank(bob);
-        zkevm.proveState(0,"");
+        zkevm.proveState(0, "");
     }
 
     function test_rollup_challenge() external {
@@ -115,18 +127,24 @@ contract ZKEVMTest is ZKEVM_Initializer {
         assertEq(alice, zkevm.submitter());
         vm.deal(alice, 5 * MIN_DEPOSIT);
         vm.startPrank(alice);
-        zkevm.stake{value:MIN_DEPOSIT}();
+        zkevm.stake{value: MIN_DEPOSIT}();
         assertEq(MIN_DEPOSIT, zkevm.deposits(alice));
 
         // alice roll up batch 1,2,3,4,5
         ZKEVM.BatchData[] memory batches = new ZKEVM.BatchData[](5);
-        for (uint256 i=0 ;i < 5;i++) {
+        for (uint64 i = 0; i < 5; i++) {
+            ZKEVM.BatchSignature memory sig = ZKEVM.BatchSignature({
+                signers: new bytes[](1), 
+                signature: bytes("0")
+            });
+
             batches[i] = ZKEVM.BatchData(
-                abi.encodePacked(i),
-                bytes32(i),
-                0,
-                abi.encodePacked(i),
-                bytes32(i)
+                i, // uint64 blockNum
+                bytes("0"), // bytes transactions
+                bytes("0"), // bytes blockWitness
+                bytes32(0), // bytes32 preStateRoot
+                bytes32(0), // bytes32 withdrawRoot
+                sig
             );
         }
         vm.expectEmit(true, true, true, true);
@@ -143,7 +161,7 @@ contract ZKEVMTest is ZKEVM_Initializer {
         vm.startPrank(bob);
         vm.expectEmit(true, true, true, true);
         emit ChallengeState(challengeBatchIndex, bob, MIN_DEPOSIT);
-        zkevm.challengeState{value:MIN_DEPOSIT}(challengeBatchIndex);
+        zkevm.challengeState{value: MIN_DEPOSIT}(challengeBatchIndex);
         assertEq(MIN_DEPOSIT, zkevm.deposits(bob));
         // bob challenge batch 3
         (
@@ -153,7 +171,7 @@ contract ZKEVMTest is ZKEVM_Initializer {
             uint256 startTime_,
             bool finished_
         ) = zkevm.challenges(challengeBatchIndex);
-        // chech challenge data
+        // check challenge data
         assertEq(batchIndex_, challengeBatchIndex);
         assertEq(challenger_, bob);
         assertEq(challengeDeposit_, MIN_DEPOSIT);
@@ -164,17 +182,16 @@ contract ZKEVMTest is ZKEVM_Initializer {
 
         // submit proof: revert with Invalid proof
         vm.expectRevert("Invalid proof");
-        zkevm.proveState(challengeBatchIndex,"");
+        zkevm.proveState(challengeBatchIndex, "");
         // submit proof
         vm.expectEmit(true, true, true, true);
         emit ChallengeRes(challengeBatchIndex, alice, "prove success");
-        zkevm.proveState(challengeBatchIndex,bytes("nil"));
+        zkevm.proveState(challengeBatchIndex, bytes("nil"));
         assertEq(zkevm.deposits(bob), 0);
-        assertEq(zkevm.deposits(alice), bobDeposit+aliceDeposit);
+        assertEq(zkevm.deposits(alice), bobDeposit + aliceDeposit);
         // submit proof twice: revert with Challenge already finished
         vm.expectRevert("Challenge already finished");
-        zkevm.proveState(challengeBatchIndex,bytes("nil"));
+        zkevm.proveState(challengeBatchIndex, bytes("nil"));
         vm.stopPrank();
     }
-
 }

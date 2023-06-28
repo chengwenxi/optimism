@@ -203,6 +203,7 @@ describe('CrossChainMessenger', () => {
                 BondManager: '0x' + '16'.repeat(20),
                 OptimismPortal: '0x' + '17'.repeat(20),
                 L2OutputOracle: '0x' + '18'.repeat(20),
+                ZKEVM: '0x' + '19'.repeat(20),
               },
               l2: {
                 L2CrossDomainMessenger: '0x' + '22'.repeat(20),
